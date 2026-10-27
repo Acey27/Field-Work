@@ -33,6 +33,17 @@ class AppLocalizations {
   String get offline => _text('offline');
   String get syncing => _text('syncing');
   String get online => _text('online');
+  String offlineWithPending(int count) =>
+      _text('offlineWithPending').replaceFirst('{count}', '$count');
+  String get confirm => _text('confirm');
+  String get invalidQr => _text('invalidQr');
+  String get workerNotCached => _text('workerNotCached');
+  String get scanSaved => _text('scanSaved');
+  String get errDateNotToday => _text('errDateNotToday');
+  String get errFieldDayNotFound => _text('errFieldDayNotFound');
+  String get errDevice => _text('errDevice');
+  String endFieldDayConfirmation(int count) =>
+      _text('endFieldDayConfirmation').replaceFirst('{count}', '$count');
   String get dashboard => _text('dashboard');
   String get settings => _text('settings');
   String get placeholder => _text('placeholder');
@@ -80,6 +91,17 @@ class AppLocalizations {
       'offline': 'Offline',
       'syncing': 'Syncing...',
       'online': 'Online',
+      'offlineWithPending': 'Offline: {count} items waiting',
+      'confirm': 'Confirm',
+      'invalidQr': 'Invalid worker QR code',
+      'workerNotCached': 'Worker is not in the local cache',
+      'scanSaved': 'Scan saved',
+      'errDateNotToday': 'The field day date does not match today.',
+      'errFieldDayNotFound': 'No field day was found for this technician.',
+      'errDevice':
+          'This device cannot sync. Check device approval and try again.',
+      'endFieldDayConfirmation':
+          'End the field day with {count} pending scans?',
       'dashboard': 'Dashboard',
       'settings': 'Settings',
       'placeholder': 'This screen is a scaffold placeholder.',
@@ -123,6 +145,17 @@ class AppLocalizations {
       'offline': 'Walang internet',
       'syncing': 'Nagsi-sync...',
       'online': 'May internet',
+      'offlineWithPending': 'Walang internet: {count} naghihintay',
+      'confirm': 'Kumpirmahin',
+      'invalidQr': 'Hindi wastong QR code ng manggagawa',
+      'workerNotCached': 'Wala ang manggagawa sa local cache',
+      'scanSaved': 'Na-save ang scan',
+      'errDateNotToday': 'Hindi tugma ang petsa ng field day sa araw na ito.',
+      'errFieldDayNotFound': 'Walang field day para sa technician na ito.',
+      'errDevice':
+          'Hindi makapag-sync ang device. Suriin ang approval at subukan muli.',
+      'endFieldDayConfirmation':
+          'Tapusin ang araw sa field na may {count} scan na naghihintay?',
       'dashboard': 'Dashboard',
       'settings': 'Settings',
       'placeholder': 'Placeholder lamang ang screen na ito.',
