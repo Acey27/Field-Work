@@ -1,8 +1,10 @@
 # QR Attendance
 
-This is the Flutter scaffold for the Echague, Isabela QR attendance system. It
-targets Android and web from one platform-neutral codebase. Real attendance
-features and Supabase migrations are intentionally not included in this task.
+This is the Flutter app for the Echague, Isabela QR attendance system. It
+targets Android and web from one platform-neutral codebase. Phase 2 adds
+protected database access, email/password authentication, technician account
+provisioning, and device registration/approval. Attendance syncing is a later
+phase.
 
 ## Requirements
 
@@ -38,8 +40,8 @@ flutter run -d <android-device-id> `
   --dart-define=SUPABASE_ANON_KEY=your-anon-key
 ```
 
-The scaffold can also start without these values so that the placeholder
-screens can be developed before Supabase is configured.
+The app can start without these values for UI work, but authentication requires
+the Supabase values to be configured.
 
 ## Run on Android and web
 

@@ -543,14 +543,14 @@ Each one is called with the user's JWT. It checks the caller's role from `profil
 
 | Function | Caller | Input | What it does |
 | --- | --- | --- | --- |
-| `create_technician_account` | admin | `{ username, full_name, starting_password, field_id? }` | Creates the Auth user with the hidden email, `email_confirm = true`, inserts the profile (`T-` code, `must_change_password = true`), optionally assigns the field. Returns `{ profile_id, code }`. Errors: `E_USERNAME_TAKEN`, `E_USERNAME_INVALID`, `E_PASSWORD_WEAK` |
+| `create_technician_account` | admin | `{ email, full_name, starting_password }` | Creates the Auth user with the supplied email, `email_confirm = true`, inserts the profile (`T-` code, `must_change_password = true`). Returns `{ profile_id, code, email }`. Errors: `E_EMAIL_TAKEN`, `E_INPUT_INVALID`, `E_PASSWORD_WEAK` |
 | `create_admin_account` | super admin | `{ email, full_name, starting_password }` | Same, with a real email and an `A-` code. Admin must set up MFA at first login |
 | `reset_account_password` | admin (technicians), super admin (anyone) | `{ profile_id, new_starting_password }` | Sets a new one-time password and `must_change_password = true` |
 | `set_account_active` | admin (technicians), super admin (anyone) | `{ profile_id, active }` | Sets `profiles.active`, bans or unbans the Auth user, signs out sessions. Disabling a technician also sets their approved device to `revoked`. Audit entry |
 | `complete_first_login` | the user | `{ new_password }` | Checks the password rules, sets the new password, sets `must_change_password = false`. This makes the starting password work only once |
 | `log_auth_event` **[P]** | anyone (rate limited) | `{ username_or_email, success }` | Writes `login` / `login_failed` audit entries and raises the "many failures" notice. Best effort, because failed logins happen inside Supabase Auth (Section 17, item 9) |
 
-- Hidden email for a technician: `<username>@noemail.attendance.local` **[P]**. Test early that Supabase accepts this domain. If it does not, use a domain the company owns. The username is the only thing the person ever types.
+- Phase 2 uses normal email/password login for technicians. The original hidden-email username flow is deferred; the `profiles.username` column remains available for a later migration if the company requires username-only login.
 - Password rules: minimum 10 characters, not on a common-password list **[P]**. The same rule applies in the app (for the message) and the Edge Function (for the real check).
 
 ---
