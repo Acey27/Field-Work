@@ -370,6 +370,11 @@ Called on app start and after every login. Returns:
 }
 ```
 
+`get_login_state()` is a signed-in bootstrap helper used only after Auth
+login. It returns the caller's role and `must_change_password` state without
+exposing profile rows to a first-login account. It is not a substitute for
+`require_active_user()`.
+
 `field` is null when the technician has no current assignment (the app shows `E_NO_ACTIVE_FIELD`). The app may use `server_time` to warn about a wrong phone clock.
 
 ### 4.5 `get_worker_cache(p_since timestamptz default null)` (technician)
@@ -831,6 +836,7 @@ Value types are fixed. Times are `"HH:MM"` in Philippine time.
 | `002_ids_time_settings_audit.sql` | B | `id_counters`, `next_id`, time helpers, `settings` defaults, audit triggers, SQL tests |
 | `003_rls.sql` | B (A reviews) | Section 7, role helpers, `revoke`/`grant` on functions, `tests/roles.sql` |
 | `004_scan_functions.sql` | B (A reviews) | `register_device`, `get_my_context`, `get_worker_cache`, `ingest_scans`, `end_field_day`, `get_my_field_day`, `get_worker_week` |
+| `005_phase2_remediation.sql` | B (A reviews) | `get_login_state`, corrected function volatility, and contract-aligned RLS/table privileges |
 | `005_admin_functions.sql` | B | Section 4.8, 4.9, 4.12, 4.14, 4.15 |
 | `006_masterlist.sql` | B (A tests lookup) | Section 4.13, fixture, tests |
 | `007_jobs_retention.sql` | B | Section 9 jobs |

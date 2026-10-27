@@ -37,12 +37,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       _error = null;
     });
     try {
-      final role = await AuthService().signIn(
+      final authState = await AuthService().signIn(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
       if (!mounted) return;
-      context.go(switch (role) {
+      if (authState.mustChangePassword) {
+        context.go('/first-login', extra: authState.role);
+        return;
+      }
+      context.go(switch (authState.role) {
         'technician' => '/technician',
         'admin' => '/admin',
         'super_admin' => '/super-admin',

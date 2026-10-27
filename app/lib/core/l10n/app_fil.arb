@@ -22,5 +22,13 @@
   "english": "English",
   "filipino": "Filipino",
   "usernameHint": "Ilagay ang username",
-  "passwordHint": "Ilagay ang password"
+  "passwordHint": "Ilagay ang password",
+  "firstLoginTitle": "Itakda ang iyong password",
+  "firstLoginDescription": "Pumili ng bagong password bago gamitin ang attendance system.",
+  "newPassword": "Bagong password",
+  "confirmPassword": "Kumpirmahin ang password",
+  "savePassword": "I-save ang password",
+  "errPasswordChangeInvalid": "Dapat magkapareho ang password at may hindi bababa sa 10 character.",
+  "errPasswordWeak": "Pumili ng password na may hindi bababa sa 10 character.",
+  "errPasswordUpdateFailed": "Hindi ma-update ang password. Subukan muli."
 }

@@ -22,5 +22,13 @@
   "english": "English",
   "filipino": "Filipino",
   "usernameHint": "Enter username",
-  "passwordHint": "Enter password"
+  "passwordHint": "Enter password",
+  "firstLoginTitle": "Set your password",
+  "firstLoginDescription": "Choose a new password before using the attendance system.",
+  "newPassword": "New password",
+  "confirmPassword": "Confirm password",
+  "savePassword": "Save password",
+  "errPasswordChangeInvalid": "Passwords must match and contain at least 10 characters.",
+  "errPasswordWeak": "Choose a password with at least 10 characters.",
+  "errPasswordUpdateFailed": "The password could not be updated. Try again."
 }
