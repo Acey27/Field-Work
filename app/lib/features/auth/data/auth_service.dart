@@ -5,7 +5,7 @@ import '../../../core/supabase/supabase_client.dart';
 class AuthService {
   SupabaseClient get _client => Supabase.instance.client;
 
-  Future<String> signIn({
+  Future<AuthState> signIn({
     required String email,
     required String password,
   }) async {
@@ -18,17 +18,32 @@ class AuthService {
     );
     final userId = response.user?.id;
     if (userId == null) throw const AuthException('E_FORBIDDEN');
-    final profile = await _client
-        .from('profiles')
-        .select('role, active, must_change_password')
-        .eq('id', userId)
-        .single();
-    if (profile['active'] != true) {
+    final state = await _client.rpc<Map<String, dynamic>>('get_login_state');
+    if (state.isEmpty) {
       throw const AuthException('E_ACCOUNT_DISABLED');
     }
-    if (profile['must_change_password'] == true) {
-      throw const AuthException('E_MUST_CHANGE_PASSWORD');
-    }
-    return profile['role'] as String;
+    return AuthState(
+      role: state['role'] as String,
+      mustChangePassword: state['must_change_password'] == true,
+    );
   }
+
+  Future<void> completeFirstLogin(String newPassword) async {
+    final response = await _client.functions.invoke(
+      'complete_first_login',
+      body: {'new_password': newPassword},
+    );
+    if (response.status < 200 || response.status >= 300) {
+      final data = response.data;
+      final code = data is Map ? data['error'] : null;
+      throw AuthException(code is String ? code : 'E_PASSWORD_UPDATE_FAILED');
+    }
+  }
+}
+
+class AuthState {
+  const AuthState({required this.role, required this.mustChangePassword});
+
+  final String role;
+  final bool mustChangePassword;
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/presentation/login_page.dart';
+import '../../features/auth/presentation/first_login_page.dart';
 import '../../features/dashboard/presentation/dashboard_page.dart';
 import '../../features/scanner/presentation/scanner_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
@@ -29,6 +30,13 @@ GoRouter buildRouter(ValueChanged<Locale> onLocaleChanged) {
         path: '/login',
         builder: (context, state) =>
             LoginPage(onLocaleChanged: onLocaleChanged),
+      ),
+      GoRoute(
+        path: '/first-login',
+        builder: (context, state) => FirstLoginPage(
+          onLocaleChanged: onLocaleChanged,
+          role: state.extra as String,
+        ),
       ),
       GoRoute(
         path: '/technician',

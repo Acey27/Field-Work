@@ -45,9 +45,17 @@ class AppLocalizations {
     'E_SERVER_CONFIG' => _text('errServerConfig'),
     'E_ACCOUNT_DISABLED' => _text('errAccountDisabled'),
     'E_MUST_CHANGE_PASSWORD' => _text('errMustChangePassword'),
+    'E_PASSWORD_WEAK' => _text('errPasswordWeak'),
+    'E_PASSWORD_UPDATE_FAILED' => _text('errPasswordUpdateFailed'),
     _ => _text('errForbidden'),
   };
   String get passwordHint => _text('passwordHint');
+  String get firstLoginTitle => _text('firstLoginTitle');
+  String get firstLoginDescription => _text('firstLoginDescription');
+  String get newPassword => _text('newPassword');
+  String get confirmPassword => _text('confirmPassword');
+  String get savePassword => _text('savePassword');
+  String get errPasswordChangeInvalid => _text('errPasswordChangeInvalid');
 
   String _text(String key) {
     Intl.defaultLocale = locale.languageCode;
@@ -84,8 +92,19 @@ class AppLocalizations {
       'errAccountDisabled':
           'This account is turned off. Please contact your admin.',
       'errMustChangePassword': 'Please choose a new password first.',
+      'errPasswordWeak': 'Choose a password with at least 10 characters.',
+      'errPasswordUpdateFailed':
+          'The password could not be updated. Try again.',
       'errForbidden': 'You are not allowed to do this. Ask your admin.',
       'passwordHint': 'Enter password',
+      'firstLoginTitle': 'Set your password',
+      'firstLoginDescription':
+          'Choose a new password before using the attendance system.',
+      'newPassword': 'New password',
+      'confirmPassword': 'Confirm password',
+      'savePassword': 'Save password',
+      'errPasswordChangeInvalid':
+          'Passwords must match and contain at least 10 characters.',
     },
     'fil': {
       'appTitle': 'QR Attendance',
@@ -116,8 +135,19 @@ class AppLocalizations {
       'errAccountDisabled':
           'Naka-off ang account na ito. Makipag-ugnayan sa admin.',
       'errMustChangePassword': 'Pumili muna ng bagong password.',
+      'errPasswordWeak':
+          'Pumili ng password na may hindi bababa sa 10 character.',
+      'errPasswordUpdateFailed': 'Hindi ma-update ang password. Subukan muli.',
       'errForbidden': 'Hindi ka pinapayagang gawin ito. Tanungin ang admin.',
       'passwordHint': 'Ilagay ang password',
+      'firstLoginTitle': 'Itakda ang iyong password',
+      'firstLoginDescription':
+          'Pumili ng bagong password bago gamitin ang attendance system.',
+      'newPassword': 'Bagong password',
+      'confirmPassword': 'Kumpirmahin ang password',
+      'savePassword': 'I-save ang password',
+      'errPasswordChangeInvalid':
+          'Dapat magkapareho ang password at may hindi bababa sa 10 character.',
     },
   };
 }

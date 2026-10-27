@@ -5,7 +5,7 @@ Deno.test("rejects malformed account input", () => {
   assertEquals(
     validateAccountInput({
       email: "bad",
-      password: "long enough",
+      starting_password: "long enough",
       full_name: "Jo",
     }),
     {
@@ -18,7 +18,7 @@ Deno.test("rejects weak passwords", () => {
   assertEquals(
     validateAccountInput({
       email: "tech@example.com",
-      password: "short",
+      starting_password: "short",
       full_name: "John Doe",
     }),
     { error: "E_PASSWORD_WEAK" },
@@ -29,13 +29,13 @@ Deno.test("normalizes valid account input", () => {
   assertEquals(
     validateAccountInput({
       email: " TECH@Example.COM ",
-      password: "long enough",
+      starting_password: "long enough",
       full_name: " John Doe ",
     }),
     {
       value: {
         email: "tech@example.com",
-        password: "long enough",
+        startingPassword: "long enough",
         fullName: "John Doe",
       },
     },
