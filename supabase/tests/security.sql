@@ -1,58 +1,58 @@
 begin;
 
-select has_table_privilege('anon', 'public.workers', 'select') is false
-  as anon_cannot_read_workers;
-select relrowsecurity
-from pg_class
-where oid = 'public.profiles'::regclass
-  and relrowsecurity;
-select relrowsecurity
-from pg_class
-where oid = 'public.workers'::regclass
-  and relrowsecurity;
-select relrowsecurity
-from pg_class
-where oid = 'public.devices'::regclass
-  and relrowsecurity;
+select plan(15);
 
-select has_function_privilege(
+select ok(
+  has_table_privilege('anon', 'public.workers', 'select') is false,
+  'anon cannot read workers'
+);
+select ok((select relrowsecurity from pg_class
+  where oid = 'public.profiles'::regclass), 'profiles have RLS');
+select ok((select relrowsecurity from pg_class
+  where oid = 'public.workers'::regclass), 'workers have RLS');
+select ok((select relrowsecurity from pg_class
+  where oid = 'public.devices'::regclass), 'devices have RLS');
+
+select ok(has_function_privilege(
   'anon', 'public.ping()', 'execute'
-) as anon_can_ping;
-select has_function_privilege(
+) , 'anon can ping');
+select ok(has_function_privilege(
   'anon', 'public.register_device(uuid,text)', 'execute'
-) is false as anon_cannot_register_devices;
-select has_function_privilege(
+) is false, 'anon cannot register devices');
+select ok(has_function_privilege(
   'authenticated', 'public.register_device(uuid,text)', 'execute'
-) as authenticated_can_register_devices;
-select has_function_privilege(
+) , 'authenticated can register devices');
+select ok(has_function_privilege(
   'authenticated', 'public.approve_device(uuid)', 'execute'
-) as authenticated_can_approve_devices;
-select has_function_privilege(
+) , 'authenticated can approve devices');
+select ok(has_function_privilege(
   'authenticated', 'public.get_login_state()', 'execute'
-) as authenticated_can_read_login_state;
+) , 'authenticated can read login state');
 
-select has_table_privilege(
+select ok(has_table_privilege(
   'authenticated', 'public.scans', 'insert'
-) is false as authenticated_cannot_insert_scans;
-select has_table_privilege(
+) is false, 'authenticated cannot insert scans');
+select ok(has_table_privilege(
   'authenticated', 'public.attendance_sessions', 'update'
-) is false as authenticated_cannot_update_sessions;
-select has_table_privilege(
+) is false, 'authenticated cannot update sessions');
+select ok(has_table_privilege(
   'authenticated', 'public.devices', 'update'
-) is false as authenticated_cannot_update_devices;
-select prokind = 'f' and provolatile = 'v' as context_function_is_volatile
-from pg_proc
-where oid = 'public.get_my_context(uuid)'::regprocedure;
+) is false, 'authenticated cannot update devices');
+select ok((select prokind = 'f' and provolatile = 'v'
+  from pg_proc
+  where oid = 'public.get_my_context(uuid)'::regprocedure),
+  'context function is volatile');
 
-select count(*) = 1 as one_technician_device_policy
-from pg_policies
-where schemaname = 'public'
-  and tablename = 'devices'
-  and policyname = 'devices_owner_or_admin';
-select count(*) = 1 as one_super_admin_audit_policy
-from pg_policies
-where schemaname = 'public'
-  and tablename = 'audit_logs'
-  and policyname = 'audit_super_select';
+select ok((select count(*) = 1 from pg_policies
+  where schemaname = 'public'
+    and tablename = 'devices'
+    and policyname = 'devices_owner_or_admin'),
+  'one technician device policy');
+select ok((select count(*) = 1 from pg_policies
+  where schemaname = 'public'
+    and tablename = 'audit_logs'
+    and policyname = 'audit_super_select'),
+  'one super admin audit policy');
 
+select * from finish();
 rollback;

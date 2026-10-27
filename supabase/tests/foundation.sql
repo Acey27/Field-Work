@@ -1,5 +1,7 @@
 begin;
 
+select plan(10);
+
 select is(public.next_id('W'), 'W-00001', 'worker IDs start at W-00001');
 select is(public.next_id('W'), 'W-00002', 'worker IDs increment safely');
 select is(public.next_id('T'), 'T-00001', 'technician IDs use T prefix');
@@ -37,4 +39,5 @@ select is(
   'default retention is 15 days'
 );
 
+select * from finish();
 rollback;

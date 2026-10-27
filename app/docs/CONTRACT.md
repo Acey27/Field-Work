@@ -207,7 +207,8 @@ One row per scan received, including ignored and blocked ones, so uploading twic
 | Column | Type | Notes |
 | --- | --- | --- |
 | `scan_id` | uuid PK | Made by the phone. This is what makes uploads safe to repeat |
-| `worker_id` | text FK workers not null | |
+| `worker_id` | text FK workers null | Null for an unknown worker rejected by validation |
+| `submitted_worker_id` | text null | Original worker ID submitted by the phone; retained for blocked unknown-worker scans |
 | `technician_id` | uuid FK profiles not null | |
 | `field_id` | uuid FK fields not null | |
 | `device_id` | uuid FK devices not null | |
