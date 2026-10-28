@@ -74,6 +74,20 @@ class AppDatabase extends _$AppDatabase {
     workerCache,
   )..where((row) => row.id.equals(workerId))).getSingleOrNull();
 
+  /// Times (UTC) of this worker's scans on the phone since [fromUtc], not
+  /// counting scans the server rejected.
+  Future<List<DateTime>> workerScanTimes(String workerId, DateTime fromUtc) async {
+    final rows =
+        await (select(localScans)..where(
+              (row) =>
+                  row.workerId.equals(workerId) &
+                  row.scannedAt.isBiggerOrEqualValue(fromUtc) &
+                  row.uploadState.equals('rejected').not(),
+            ))
+            .get();
+    return rows.map((row) => row.scannedAt.toUtc()).toList();
+  }
+
   Future<int> pendingCount() async {
     final scans = await (select(
       localScans,

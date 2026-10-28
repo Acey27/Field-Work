@@ -2,12 +2,44 @@ import 'package:geolocator/geolocator.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/local/app_database.dart';
+import '../../../core/utils/ph_time.dart';
+import '../domain/qr_payload.dart';
+import '../domain/scan_decision.dart';
 
 class ScanContext {
   const ScanContext({required this.technicianId, required this.fieldId});
 
   final String technicianId;
   final String fieldId;
+}
+
+enum ScanOutcome {
+  /// The text is not a worker QR code.
+  invalid,
+
+  /// The worker is not in the phone's worker list yet.
+  workerNotCached,
+
+  /// The card's check code differs from the list (old or copied card).
+  badCard,
+
+  /// The worker is turned off.
+  inactive,
+
+  /// Same card scanned again within the repeat window. Nothing saved.
+  repeat,
+
+  /// Saved on the phone, ready to upload.
+  saved,
+}
+
+class ScanResult {
+  const ScanResult(this.outcome, {this.worker, this.direction, this.at});
+
+  final ScanOutcome outcome;
+  final WorkerCacheData? worker;
+  final LocalDirection? direction;
+  final DateTime? at;
 }
 
 class ScanRepository {
@@ -18,6 +50,48 @@ class ScanRepository {
 
   Future<WorkerCacheData?> findWorker(String workerId) =>
       database.findWorker(workerId);
+
+  /// The whole phone-side scan: check the card, apply the 30-second repeat
+  /// rule, work out in or out, and save the scan before anything is shown
+  /// (CONTRACT.md section 6). [position] is only asked for when a scan is saved.
+  Future<ScanResult> processScan({
+    required ScanContext context,
+    required String? rawValue,
+    required DateTime now,
+    Future<Position?> Function()? position,
+  }) async {
+    final payload = QrPayload.parse(rawValue);
+    if (payload == null) return const ScanResult(ScanOutcome.invalid);
+    final worker = await findWorker(payload.workerId);
+    if (worker == null) return const ScanResult(ScanOutcome.workerNotCached);
+    if (worker.qrCheck != payload.qrCheck) {
+      return ScanResult(ScanOutcome.badCard, worker: worker);
+    }
+    if (!worker.active) {
+      return ScanResult(ScanOutcome.inactive, worker: worker);
+    }
+    final dayStart = phTimeToUtc(phDateOf(now), 0, 0);
+    final decision = decideScan(
+      todaysScans: await database.workerScanTimes(worker.id, dayStart),
+      now: now,
+    );
+    if (decision.isRepeat) {
+      return ScanResult(ScanOutcome.repeat, worker: worker);
+    }
+    await saveScan(
+      context: context,
+      workerId: worker.id,
+      qrCheck: payload.qrCheck,
+      scannedAt: now,
+      position: await position?.call(),
+    );
+    return ScanResult(
+      ScanOutcome.saved,
+      worker: worker,
+      direction: decision.direction,
+      at: now,
+    );
+  }
 
   Future<String> saveScan({
     required ScanContext context,

@@ -108,8 +108,27 @@ class AppLocalizations {
     'E_OVERLAP' => _text('errOverlap'),
     'E_FIELD_DAY_NOT_FOUND' => _text('errFieldDayNotFound'),
     'E_FORBIDDEN' => _text('errForbidden'),
+    'E_SETTING_INVALID' => _text('errSettingInvalid'),
     _ => _text('errAdminAction'),
   };
+  String get cameraOpen => _text('cameraOpen');
+  String get cameraClose => _text('cameraClose');
+  String get cameraOff => _text('cameraOff');
+  String get cameraError => _text('cameraError');
+  String get scanLooking => _text('scanLooking');
+  String get scanDetected => _text('scanDetected');
+  String get scanBadCard => _text('scanBadCard');
+  String get scanInactive => _text('scanInactive');
+  String get scanRepeat => _text('scanRepeat');
+  String get scanNotReady => _text('scanNotReady');
+  String clockedInAt(String name, String time) => _text('clockedInAt')
+      .replaceFirst('{name}', name)
+      .replaceFirst('{time}', time);
+  String clockedOutAt(String name, String time) => _text('clockedOutAt')
+      .replaceFirst('{name}', name)
+      .replaceFirst('{time}', time);
+  String get timeNotSet => _text('timeNotSet');
+  String get pickTime => _text('pickTime');
   String get retry => _text('retry');
   String get workers => _text('workers');
   String get fields => _text('fields');
@@ -208,7 +227,8 @@ class AppLocalizations {
       'offlineWithPending': 'Offline: {count} items waiting',
       'confirm': 'Confirm',
       'invalidQr': 'Invalid worker QR code',
-      'workerNotCached': 'Worker is not in the local cache',
+      'workerNotCached':
+          'This worker is not on this phone yet. Tap sync, then scan again.',
       'scanSaved': 'Scan saved',
       'errDateNotToday': 'The field day date does not match today.',
       'errFieldDayNotFound': 'No field day was found for this technician.',
@@ -275,6 +295,23 @@ class AppLocalizations {
       'errOverlap':
           'This worker already has time recorded at that time. Check the other records.',
       'errAdminAction': 'The action could not be completed. Try again.',
+      'errSettingInvalid': 'This value is not allowed for this setting.',
+      'cameraOpen': 'Open camera',
+      'cameraClose': 'Close camera',
+      'cameraOff': 'Camera is off. Tap Open camera to scan.',
+      'cameraError':
+          'The camera cannot be used. Allow camera access in settings, then try again.',
+      'scanLooking': 'Looking for a QR code...',
+      'scanDetected': 'QR code detected',
+      'scanBadCard': 'This card is not valid. Ask your admin for a new card.',
+      'scanInactive': 'This worker is turned off. Tell your admin.',
+      'scanRepeat': 'Already scanned a moment ago.',
+      'scanNotReady':
+          'Scanning is not ready. Connect to the internet, check that you have a field, then tap sync.',
+      'clockedInAt': '{name}: CLOCKED IN {time}',
+      'clockedOutAt': '{name}: CLOCKED OUT {time}',
+      'timeNotSet': 'Not set',
+      'pickTime': 'Choose time',
       'retry': 'Try again',
       'workers': 'Workers',
       'fields': 'Fields',
@@ -376,7 +413,8 @@ class AppLocalizations {
       'offlineWithPending': 'Walang internet: {count} naghihintay',
       'confirm': 'Kumpirmahin',
       'invalidQr': 'Hindi wastong QR code ng manggagawa',
-      'workerNotCached': 'Wala ang manggagawa sa local cache',
+      'workerNotCached':
+          'Wala pa sa teleponong ito ang manggagawa. Pindutin ang sync, saka mag-scan muli.',
       'scanSaved': 'Na-save ang scan',
       'errDateNotToday': 'Hindi tugma ang petsa ng field day sa araw na ito.',
       'errFieldDayNotFound': 'Walang field day para sa technician na ito.',
@@ -445,6 +483,24 @@ class AppLocalizations {
       'errOverlap':
           'May naitala nang oras ang manggagawang ito sa oras na iyon. Tingnan ang ibang talaan.',
       'errAdminAction': 'Hindi natapos ang aksyon. Subukan muli.',
+      'errSettingInvalid': 'Hindi pinapayagan ang halagang ito sa setting na ito.',
+      'cameraOpen': 'Buksan ang camera',
+      'cameraClose': 'Isara ang camera',
+      'cameraOff': 'Nakasara ang camera. Pindutin ang Buksan ang camera para mag-scan.',
+      'cameraError':
+          'Hindi magamit ang camera. Payagan ang camera sa settings, saka subukan muli.',
+      'scanLooking': 'Naghahanap ng QR code...',
+      'scanDetected': 'May nakitang QR code',
+      'scanBadCard':
+          'Hindi valid ang card na ito. Humingi ng bagong card sa admin.',
+      'scanInactive': 'Naka-off ang manggagawang ito. Sabihin sa admin.',
+      'scanRepeat': 'Na-scan na ito kani-kanina lang.',
+      'scanNotReady':
+          'Hindi pa handa ang pag-scan. Kumonekta sa internet, tiyaking may field ka, saka pindutin ang sync.',
+      'clockedInAt': '{name}: NAKA-CLOCK IN {time}',
+      'clockedOutAt': '{name}: NAKA-CLOCK OUT {time}',
+      'timeNotSet': 'Hindi pa naitakda',
+      'pickTime': 'Pumili ng oras',
       'retry': 'Subukan muli',
       'workers': 'Mga manggagawa',
       'fields': 'Mga field',

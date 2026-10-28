@@ -50,6 +50,31 @@ void main() {
     });
   });
 
+  group('12-hour settings display', () {
+    test('formats stored 24-hour values as AM and PM', () {
+      expect(formatClock12('00:00'), '12:00 AM');
+      expect(formatClock12('04:00'), '4:00 AM');
+      expect(formatClock12('12:00'), '12:00 PM');
+      expect(formatClock12('17:00'), '5:00 PM');
+      expect(formatClock12('21:00'), '9:00 PM');
+      expect(formatClock12('23:59'), '11:59 PM');
+    });
+
+    test('rejects invalid stored values', () {
+      expect(formatClock12('24:00'), '');
+      expect(formatClock12('99:99'), '');
+      expect(formatClock12('5:00'), '');
+      expect(formatClock12(null), '');
+      expect(parseClock24('12:60'), isNull);
+    });
+
+    test('writes the 24-hour wire format with zero padding', () {
+      expect(formatClock24(4, 0), '04:00');
+      expect(formatClock24(17, 5), '17:05');
+      expect(parseClock24('17:05'), (hour: 17, minute: 5));
+    });
+  });
+
   group('formatMinutes', () {
     test('formats exact hours without minutes', () {
       expect(formatMinutes(60), '1 hour');

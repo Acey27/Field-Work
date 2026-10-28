@@ -38,6 +38,25 @@ class AdminToolsService {
         .toList();
   }
 
+  /// Current values of the time settings, keyed by setting name (`HH:MM`).
+  Future<Map<String, String>> timeSettings() async {
+    _requireConfigured();
+    final rows = await _client
+        .from('settings')
+        .select('key, value')
+        .inFilter('key', timeSettingKeys);
+    return {
+      for (final row in rows)
+        if (row['value'] is String) row['key'] as String: row['value'] as String,
+    };
+  }
+
+  static const timeSettingKeys = [
+    'scan_hours_start',
+    'scan_hours_end',
+    'reminder_time',
+  ];
+
   Future<void> setSetting(String key, dynamic value) async {
     _requireConfigured();
     await _client.rpc<Map<String, dynamic>>(

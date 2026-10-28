@@ -8,11 +8,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/local/app_database.dart';
 import '../../../core/l10n/app_localizations.dart';
+import '../../../core/utils/ph_time.dart';
 import '../../../shared/widgets/language_toggle.dart';
 import '../../auth/data/device_service.dart';
 import '../data/scan_repository.dart';
 import '../data/sync_service.dart';
-import '../domain/qr_payload.dart';
+import '../domain/scan_decision.dart';
+import 'scan_feedback.dart';
 
 class ScannerPage extends StatefulWidget {
   const ScannerPage({required this.onLocaleChanged, super.key});
@@ -23,21 +25,34 @@ class ScannerPage extends StatefulWidget {
   State<ScannerPage> createState() => _ScannerPageState();
 }
 
-class _ScannerPageState extends State<ScannerPage> {
+class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
+  /// The same unreadable or repeated text is not handled again for this long,
+  /// so the screen does not flash on every camera frame.
+  static const _frameCooldown = Duration(seconds: 2);
+  static const _feedbackDuration = Duration(seconds: 4);
+
   final _database = AppDatabase.defaults();
-  final _scannerController = MobileScannerController();
+  final _scannerController = MobileScannerController(autoStart: false);
   late final ScanRepository _repository;
   late final SyncService _syncService;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  Timer? _feedbackTimer;
   ScanContext? _scanContext;
   String _status = 'offline';
   bool _busy = false;
+  bool _syncing = false;
+  bool _cameraOn = false;
+  bool _askedForLocation = false;
+  String? _lastRaw;
+  DateTime? _lastRawAt;
+  ScanFeedback _feedback = const ScanFeedback.idle();
   int _pendingCount = 0;
   int _clockedInCount = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _repository = ScanRepository(_database);
     _syncService = SyncService(database: _database);
     _loadContext();
@@ -46,17 +61,62 @@ class _ScannerPageState extends State<ScannerPage> {
       results,
     ) {
       final online = results.any((result) => result != ConnectivityResult.none);
-      if (online) _sync();
+      if (online) _syncOrLoad();
       if (mounted) setState(() => _status = online ? 'online' : 'offline');
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openCamera());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _feedbackTimer?.cancel();
     _connectivitySubscription?.cancel();
     _scannerController.dispose();
     _database.close();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Free the camera while the app is in the background.
+    if (state == AppLifecycleState.resumed) {
+      if (_cameraOn) _startController();
+    } else if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _scannerController.stop();
+    }
+  }
+
+  Future<void> _openCamera() async {
+    if (!mounted) return;
+    setState(() => _cameraOn = true);
+    await _startController();
+  }
+
+  Future<void> _closeCamera() async {
+    setState(() {
+      _cameraOn = false;
+      _feedback = const ScanFeedback.idle();
+    });
+    _feedbackTimer?.cancel();
+    try {
+      await _scannerController.stop();
+    } on Object {
+      // Already stopped.
+    }
+  }
+
+  Future<void> _startController() async {
+    try {
+      await _scannerController.start();
+    } on MobileScannerException {
+      // The camera panel shows the error from the controller state.
+      if (mounted) setState(() {});
+    } on Object {
+      if (mounted) setState(() {});
+    }
   }
 
   Future<void> _loadContext() async {
@@ -82,8 +142,12 @@ class _ScannerPageState extends State<ScannerPage> {
     if (mounted) setState(() => _pendingCount = count);
   }
 
+  /// The sync button: load the field first if the app does not have it yet.
+  Future<void> _syncOrLoad() => _scanContext == null ? _loadContext() : _sync();
+
   Future<void> _sync() async {
-    if (_busy || _scanContext == null) return;
+    if (_syncing || _scanContext == null) return;
+    _syncing = true;
     if (mounted) setState(() => _status = 'syncing');
     try {
       await _syncService.sync();
@@ -101,75 +165,119 @@ class _ScannerPageState extends State<ScannerPage> {
       }
     } catch (_) {
       if (mounted) setState(() => _status = 'offline');
+    } finally {
+      _syncing = false;
+    }
+  }
+
+  Future<Position?> _position() async {
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied && !_askedForLocation) {
+        _askedForLocation = true;
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return null;
+      }
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          timeLimit: Duration(seconds: 3),
+        ),
+      );
+    } on Object {
+      // Scanning never stops because location is missing (SPEC section 17).
+      return null;
+    }
+  }
+
+  void _setFeedback(ScanFeedback feedback, {bool autoClear = true}) {
+    _feedbackTimer?.cancel();
+    if (!mounted) return;
+    setState(() => _feedback = feedback);
+    if (autoClear) {
+      _feedbackTimer = Timer(_feedbackDuration, () {
+        if (mounted) setState(() => _feedback = const ScanFeedback.idle());
+      });
     }
   }
 
   Future<void> _onDetect(BarcodeCapture capture) async {
-    if (_busy || _scanContext == null) return;
+    // Set at once, before any await, so two camera frames cannot both run.
+    if (_busy || !_cameraOn) return;
     final raw = capture.barcodes.firstOrNull?.rawValue;
-    final payload = QrPayload.parse(raw);
-    if (payload == null) {
-      _showMessage(AppLocalizations.of(context).invalidQr);
+    if (raw == null) return;
+    final now = DateTime.now().toUtc();
+    final lastAt = _lastRawAt;
+    if (raw == _lastRaw &&
+        lastAt != null &&
+        now.difference(lastAt) < _frameCooldown) {
       return;
     }
-    final worker = await _repository.findWorker(payload.workerId);
-    if (!mounted) return;
-    if (worker == null) {
-      _showMessage(AppLocalizations.of(context).workerNotCached);
-      return;
-    }
-    setState(() {
-      _busy = true;
-    });
-    await _scannerController.stop();
-    final confirmed = await _confirmWorker(worker);
-    if (confirmed && _scanContext != null) {
-      Position? position;
-      try {
-        if (await Geolocator.checkPermission() != LocationPermission.denied) {
-          position = await Geolocator.getCurrentPosition();
-        }
-      } catch (_) {}
-      await _repository.saveScan(
-        context: _scanContext!,
-        workerId: payload.workerId,
-        qrCheck: payload.qrCheck,
-        scannedAt: DateTime.now().toUtc(),
-        position: position,
+    _busy = true;
+    _lastRaw = raw;
+    _lastRawAt = now;
+    final l10n = AppLocalizations.of(context);
+    try {
+      _setFeedback(
+        ScanFeedback(ScanFeedbackKind.detected, l10n.scanDetected),
+        autoClear: false,
       );
-      await _refreshPendingCount();
-      if (mounted) _showMessage(AppLocalizations.of(context).scanSaved);
-    }
-    if (mounted) {
-      setState(() {
-        _busy = false;
-      });
-      await _scannerController.start();
+      final scanContext = _scanContext;
+      if (scanContext == null) {
+        _setFeedback(ScanFeedback(ScanFeedbackKind.error, l10n.scanNotReady));
+        return;
+      }
+      final result = await _repository.processScan(
+        context: scanContext,
+        rawValue: raw,
+        now: now,
+        position: _position,
+      );
+      if (!mounted) return;
+      _setFeedback(_feedbackFor(result, AppLocalizations.of(context)));
+      if (result.outcome == ScanOutcome.saved) {
+        await _refreshPendingCount();
+      } else if (result.outcome == ScanOutcome.badCard) {
+        // The worker list may be out of date after a reissued card.
+        unawaited(_sync());
+      }
+    } finally {
+      _busy = false;
     }
   }
 
-  Future<bool> _confirmWorker(WorkerCacheData worker) async {
-    final l10n = AppLocalizations.of(context);
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(worker.name),
-        content: Text(worker.active ? worker.id : 'Worker inactive'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(MaterialLocalizations.of(context).cancelButtonLabel),
-          ),
-          FilledButton(
-            onPressed: worker.active
-                ? () => Navigator.pop(context, true)
-                : null,
-            child: Text(l10n.confirm),
-          ),
-        ],
+  ScanFeedback _feedbackFor(ScanResult result, AppLocalizations l10n) {
+    final name = result.worker?.name ?? '';
+    return switch (result.outcome) {
+      ScanOutcome.saved => ScanFeedback(
+        ScanFeedbackKind.success,
+        result.direction == LocalDirection.clockOut
+            ? l10n.clockedOutAt(name, formatPhTime(result.at!))
+            : l10n.clockedInAt(name, formatPhTime(result.at!)),
       ),
-    );
-    return result ?? false;
+      ScanOutcome.repeat => ScanFeedback(
+        ScanFeedbackKind.attention,
+        l10n.scanRepeat,
+      ),
+      ScanOutcome.invalid => ScanFeedback(
+        ScanFeedbackKind.error,
+        l10n.invalidQr,
+      ),
+      ScanOutcome.workerNotCached => ScanFeedback(
+        ScanFeedbackKind.error,
+        l10n.workerNotCached,
+      ),
+      ScanOutcome.badCard => ScanFeedback(
+        ScanFeedbackKind.error,
+        l10n.scanBadCard,
+      ),
+      ScanOutcome.inactive => ScanFeedback(
+        ScanFeedbackKind.error,
+        l10n.scanInactive,
+      ),
+    };
   }
 
   Future<void> _endFieldDay() async {
@@ -219,6 +327,11 @@ class _ScannerPageState extends State<ScannerPage> {
       'online' => l10n.online,
       _ => l10n.offlineWithPending(_pendingCount),
     };
+    final feedback = _cameraOn
+        ? (_feedback.kind == ScanFeedbackKind.idle
+              ? ScanFeedback(ScanFeedbackKind.idle, l10n.scanLooking)
+              : _feedback)
+        : ScanFeedback(ScanFeedbackKind.idle, l10n.cameraOff);
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.scan),
@@ -232,17 +345,51 @@ class _ScannerPageState extends State<ScannerPage> {
             ),
             title: Text(status),
             trailing: IconButton(
-              onPressed: _sync,
+              tooltip: l10n.syncing,
+              onPressed: _syncOrLoad,
               icon: const Icon(Icons.sync),
             ),
           ),
+          if (_scanContext == null)
+            MaterialBanner(
+              content: Text(l10n.scanNotReady),
+              actions: [
+                TextButton(onPressed: _syncOrLoad, child: Text(l10n.retry)),
+              ],
+            ),
           Expanded(
-            child: MobileScanner(
-              controller: _scannerController,
-              onDetect: _onDetect,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                MobileScanner(
+                  controller: _scannerController,
+                  onDetect: _onDetect,
+                  errorBuilder: (context, error) =>
+                      CameraErrorPanel(onRetry: _startController),
+                ),
+                if (!_cameraOn) const CameraOffPanel(),
+                if (_cameraOn) ScanFrame(kind: feedback.kind),
+              ],
             ),
           ),
-          Text(l10n.workersStillClockedIn(_clockedInCount)),
+          ScanFeedbackBanner(feedback: feedback),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _cameraOn ? _closeCamera : _openCamera,
+                icon: Icon(
+                  _cameraOn ? Icons.videocam_off : Icons.videocam,
+                ),
+                label: Text(_cameraOn ? l10n.cameraClose : l10n.cameraOpen),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(l10n.workersStillClockedIn(_clockedInCount)),
+          ),
           Padding(
             padding: const EdgeInsets.all(16),
             child: SizedBox(

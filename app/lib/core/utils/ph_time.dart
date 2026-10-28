@@ -37,6 +37,30 @@ String formatPhTime(DateTime utc) {
   return '$hour:$minute $suffix';
 }
 
+final _clock24 = RegExp(r'^([01]\d|2[0-3]):([0-5]\d)$');
+
+/// Parses a stored setting such as `17:00`. Returns null if it is not a valid
+/// 24-hour `HH:MM` time.
+({int hour, int minute})? parseClock24(String? value) {
+  final match = value == null ? null : _clock24.firstMatch(value);
+  if (match == null) return null;
+  return (hour: int.parse(match.group(1)!), minute: int.parse(match.group(2)!));
+}
+
+/// The stored 24-hour wire format, `HH:MM`, for a picked time.
+String formatClock24(int hour, int minute) =>
+    '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+
+/// Shows a stored `HH:MM` setting as normal 12-hour time, for example
+/// `17:00` becomes `5:00 PM`. Returns an empty string if [value] is invalid.
+String formatClock12(String? value) {
+  final time = parseClock24(value);
+  if (time == null) return '';
+  final hour = time.hour % 12 == 0 ? 12 : time.hour % 12;
+  final suffix = time.hour < 12 ? 'AM' : 'PM';
+  return '$hour:${time.minute.toString().padLeft(2, '0')} $suffix';
+}
+
 String formatMinutes(int minutes) {
   if (minutes == 0) return '0 minutes';
   final hours = minutes ~/ 60;

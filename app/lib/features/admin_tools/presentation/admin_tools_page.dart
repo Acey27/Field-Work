@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/l10n/app_localizations.dart';
+import '../../../core/utils/ph_time.dart';
 import '../../../shared/widgets/language_toggle.dart';
 import '../data/admin_tools_service.dart';
 
@@ -16,7 +18,23 @@ class AdminToolsPage extends StatefulWidget {
 class _AdminToolsPageState extends State<AdminToolsPage> {
   final _service = AdminToolsService();
   List<Map<String, dynamic>> _masterlist = [];
+  Map<String, String> _times = {};
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTimes();
+  }
+
+  Future<void> _loadTimes() async {
+    try {
+      final times = await _service.timeSettings();
+      if (mounted) setState(() => _times = times);
+    } on Object {
+      // The rows show "Not set"; editing still works.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,14 +51,17 @@ class _AdminToolsPageState extends State<AdminToolsPage> {
           const SizedBox(height: 12),
           _SettingButton(
             label: l10n.scanHoursStart,
+            value: _timeLabel('scan_hours_start', l10n),
             onPressed: () => _setTime('scan_hours_start', l10n),
           ),
           _SettingButton(
             label: l10n.scanHoursEnd,
+            value: _timeLabel('scan_hours_end', l10n),
             onPressed: () => _setTime('scan_hours_end', l10n),
           ),
           _SettingButton(
             label: l10n.reminderTime,
+            value: _timeLabel('reminder_time', l10n),
             onPressed: () => _setTime('reminder_time', l10n),
           ),
           const Divider(height: 32),
@@ -81,32 +102,45 @@ class _AdminToolsPageState extends State<AdminToolsPage> {
     );
   }
 
-  Future<void> _setTime(String key, AppLocalizations l10n) async {
-    final controller = TextEditingController(text: '17:00');
-    final value = await showDialog<String>(
+  String _timeLabel(String key, AppLocalizations l10n) {
+    final text = formatClock12(_times[key]);
+    return text.isEmpty ? l10n.timeNotSet : text;
+  }
+
+  /// A 12-hour (AM/PM) time picker, whatever the phone's 24-hour setting is.
+  Future<TimeOfDay?> _pickTime(
+    AppLocalizations l10n,
+    TimeOfDay initial,
+  ) {
+    return showTimePicker(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.settings),
-        content: TextField(
-          controller: controller,
-          decoration: InputDecoration(labelText: l10n.timeFormat),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: Text(l10n.save),
-          ),
-        ],
+      helpText: l10n.pickTime,
+      initialTime: initial,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+        child: child!,
       ),
     );
-    controller.dispose();
-    if (value == null || !RegExp(r'^\d{2}:\d{2}$').hasMatch(value)) return;
+  }
+
+  Future<void> _setTime(String key, AppLocalizations l10n) async {
+    final current = parseClock24(_times[key]);
+    final picked = await _pickTime(
+      l10n,
+      current == null
+          ? const TimeOfDay(hour: 17, minute: 0)
+          : TimeOfDay(hour: current.hour, minute: current.minute),
+    );
+    if (picked == null || !mounted) return;
+    final value = formatClock24(picked.hour, picked.minute);
     try {
       await _service.setSetting(key, value);
+      if (!mounted) return;
+      setState(() => _times = {..._times, key: value});
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(l10n.saved)));
+    } on PostgrestException catch (error) {
+      if (mounted) _showMessage(l10n.adminError(error.message));
     } on Object {
       if (mounted) _showError(l10n);
     }
@@ -128,72 +162,93 @@ class _AdminToolsPageState extends State<AdminToolsPage> {
     final worker = TextEditingController();
     final field = TextEditingController();
     final technician = TextEditingController();
-    final date = TextEditingController(text: '2026-10-28');
-    final timeIn = TextEditingController(text: '08:00');
-    final timeOut = TextEditingController(text: '17:00');
+    final date = TextEditingController(
+      text: formatPhDate(phDateOf(DateTime.now())),
+    );
     final reason = TextEditingController();
+    var timeIn = const TimeOfDay(hour: 8, minute: 0);
+    var timeOut = const TimeOfDay(hour: 17, minute: 0);
+    String label(TimeOfDay time) =>
+        formatClock12(formatClock24(time.hour, time.minute));
     final saved = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.addTimeRecord),
-        content: SingleChildScrollView(
-          child: Column(
-            children: [
-              for (final entry in {
-                l10n.workerId: worker,
-                l10n.fieldId: field,
-                l10n.technicianId: technician,
-                l10n.workDate: date,
-                l10n.timeIn: timeIn,
-                l10n.timeOut: timeOut,
-                l10n.reason: reason,
-              }.entries)
-                TextField(
-                  controller: entry.value,
-                  decoration: InputDecoration(labelText: entry.key),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(l10n.addTimeRecord),
+          content: SingleChildScrollView(
+            child: Column(
+              children: [
+                for (final entry in {
+                  l10n.workerId: worker,
+                  l10n.fieldId: field,
+                  l10n.technicianId: technician,
+                  l10n.workDate: date,
+                }.entries)
+                  TextField(
+                    controller: entry.value,
+                    decoration: InputDecoration(labelText: entry.key),
+                  ),
+                ListTile(
+                  title: Text(l10n.timeIn),
+                  subtitle: Text(label(timeIn)),
+                  trailing: const Icon(Icons.schedule),
+                  onTap: () async {
+                    final picked = await _pickTime(l10n, timeIn);
+                    if (picked != null) setDialogState(() => timeIn = picked);
+                  },
                 ),
-            ],
+                ListTile(
+                  title: Text(l10n.timeOut),
+                  subtitle: Text(label(timeOut)),
+                  trailing: const Icon(Icons.schedule),
+                  onTap: () async {
+                    final picked = await _pickTime(l10n, timeOut);
+                    if (picked != null) setDialogState(() => timeOut = picked);
+                  },
+                ),
+                TextField(
+                  controller: reason,
+                  decoration: InputDecoration(labelText: l10n.reason),
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () async {
+                try {
+                  final dateValue = _parseDate(date.text);
+                  await _service.addTimeRecord(
+                    workerId: worker.text.trim(),
+                    fieldId: field.text.trim(),
+                    technicianId: technician.text.trim(),
+                    workDate: dateValue,
+                    timeIn: phTimeToUtc(dateValue, timeIn.hour, timeIn.minute),
+                    timeOut: phTimeToUtc(
+                      dateValue,
+                      timeOut.hour,
+                      timeOut.minute,
+                    ),
+                    reason: reason.text.trim(),
+                  );
+                  if (context.mounted) Navigator.pop(context, true);
+                } on PostgrestException catch (error) {
+                  if (mounted) _showMessage(l10n.adminError(error.message));
+                } on Object {
+                  if (mounted) _showError(l10n);
+                }
+              },
+              child: Text(l10n.save),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () async {
-              try {
-                final dateValue = DateTime.parse(date.text);
-                final inValue = _parseTime(dateValue, timeIn.text);
-                final outValue = _parseTime(dateValue, timeOut.text);
-                await _service.addTimeRecord(
-                  workerId: worker.text.trim(),
-                  fieldId: field.text.trim(),
-                  technicianId: technician.text.trim(),
-                  workDate: dateValue,
-                  timeIn: inValue,
-                  timeOut: outValue,
-                  reason: reason.text.trim(),
-                );
-                if (context.mounted) Navigator.pop(context, true);
-              } on Object {
-                if (context.mounted) _showError(l10n);
-              }
-            },
-            child: Text(l10n.save),
-          ),
-        ],
       ),
     );
-    for (final controller in [
-      worker,
-      field,
-      technician,
-      date,
-      timeIn,
-      timeOut,
-      reason,
-    ]) {
+    for (final controller in [worker, field, technician, date, reason]) {
       controller.dispose();
     }
     if (saved == true && mounted) {
@@ -202,33 +257,46 @@ class _AdminToolsPageState extends State<AdminToolsPage> {
     }
   }
 
-  DateTime _parseTime(DateTime date, String value) {
-    final parts = value.split(':');
-    return DateTime(
-      date.year,
-      date.month,
-      date.day,
+  /// `YYYY-MM-DD` as a date-only UTC value (a Philippine calendar date).
+  DateTime _parseDate(String value) {
+    final parts = value.trim().split('-');
+    return DateTime.utc(
       int.parse(parts[0]),
       int.parse(parts[1]),
+      int.parse(parts[2]),
     );
   }
 
-  void _showError(AppLocalizations l10n) {
+  void _showError(AppLocalizations l10n) =>
+      _showMessage(l10n.adminToolsOperationFailed);
+
+  void _showMessage(String message) {
     ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(l10n.adminToolsOperationFailed)));
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
 class _SettingButton extends StatelessWidget {
-  const _SettingButton({required this.label, required this.onPressed});
+  const _SettingButton({
+    required this.label,
+    required this.value,
+    required this.onPressed,
+  });
   final String label;
+  final String value;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
       title: Text(label),
-      trailing: IconButton(onPressed: onPressed, icon: const Icon(Icons.edit)),
+      subtitle: Text(value, style: Theme.of(context).textTheme.titleMedium),
+      onTap: onPressed,
+      trailing: IconButton(
+        tooltip: AppLocalizations.of(context).pickTime,
+        onPressed: onPressed,
+        icon: const Icon(Icons.edit),
+      ),
     );
   }
 }
