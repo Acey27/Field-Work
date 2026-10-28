@@ -870,6 +870,7 @@ Each item has a recommended answer. Tick one when agreed.
 | Date | Version | Who | Change |
 | --- | --- | --- | --- |
 | 2026-10-27 | 0.1 | draft | First draft from the spec and the build guide |
+| 2026-10-28 | 0.1 | project note | Phase 3 integration verification is pending: technician account provisioning, field/worker test data, offline-to-Supabase sync, retry idempotency, role checks, and end-field-day behavior must be tested through the UI against the development project. Phase 4 may proceed, but Phase 3 is not signed off until these tests pass. |
 
 ---
 
