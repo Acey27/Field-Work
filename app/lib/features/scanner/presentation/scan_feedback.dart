@@ -1,8 +1,51 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/app_localizations.dart';
+import '../domain/scan_readiness.dart';
 
 enum ScanFeedbackKind { idle, detected, success, attention, error }
+
+/// The message that tells the technician why scanning cannot start yet.
+ScanFeedback feedbackForReadiness(
+  AppLocalizations l10n,
+  ScanReadiness readiness,
+) {
+  return switch (readiness) {
+    ScanReadiness.loading => ScanFeedback(
+      ScanFeedbackKind.idle,
+      l10n.scanLoading,
+    ),
+    ScanReadiness.ready => const ScanFeedback.idle(),
+    ScanReadiness.devicePending => ScanFeedback(
+      ScanFeedbackKind.attention,
+      l10n.errDevicePending,
+    ),
+    ScanReadiness.deviceNotApproved => ScanFeedback(
+      ScanFeedbackKind.error,
+      l10n.errDeviceNotApproved,
+    ),
+    ScanReadiness.deviceRevoked => ScanFeedback(
+      ScanFeedbackKind.error,
+      l10n.errDeviceRevoked,
+    ),
+    ScanReadiness.noField => ScanFeedback(
+      ScanFeedbackKind.attention,
+      l10n.errNoActiveField,
+    ),
+    ScanReadiness.accountDisabled => ScanFeedback(
+      ScanFeedbackKind.error,
+      l10n.errAccountDisabled,
+    ),
+    ScanReadiness.mustChangePassword => ScanFeedback(
+      ScanFeedbackKind.attention,
+      l10n.errMustChangePassword,
+    ),
+    ScanReadiness.offline => ScanFeedback(
+      ScanFeedbackKind.error,
+      l10n.errScanOffline,
+    ),
+  };
+}
 
 /// What the scanner screen tells the technician right now.
 class ScanFeedback {

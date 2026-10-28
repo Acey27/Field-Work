@@ -111,6 +111,14 @@ class AppLocalizations {
     'E_SETTING_INVALID' => _text('errSettingInvalid'),
     _ => _text('errAdminAction'),
   };
+  String get errDevicePending => _text('errDevicePending');
+  String get errDeviceNotApproved => _text('errDeviceNotApproved');
+  String get errDeviceRevoked => _text('errDeviceRevoked');
+  String get errNoActiveField => _text('errNoActiveField');
+  String get errScanOffline => _text('errScanOffline');
+  String get errAccountDisabled => _text('errAccountDisabled');
+  String get errMustChangePassword => _text('errMustChangePassword');
+  String get scanLoading => _text('scanLoading');
   String get cameraOpen => _text('cameraOpen');
   String get cameraClose => _text('cameraClose');
   String get cameraOff => _text('cameraOff');
@@ -296,6 +304,16 @@ class AppLocalizations {
           'This worker already has time recorded at that time. Check the other records.',
       'errAdminAction': 'The action could not be completed. Try again.',
       'errSettingInvalid': 'This value is not allowed for this setting.',
+      'errDevicePending':
+          'This phone is waiting for approval. Ask your admin to approve it.',
+      'errDeviceNotApproved':
+          'This phone is not registered. Log in again to register it.',
+      'errDeviceRevoked': 'This phone is no longer allowed. Ask your admin.',
+      'errNoActiveField':
+          'You have no field yet. Ask your admin to assign one.',
+      'errScanOffline':
+          'Cannot reach the server. Connect to the internet, then tap Try again.',
+      'scanLoading': 'Getting your field ready...',
       'cameraOpen': 'Open camera',
       'cameraClose': 'Close camera',
       'cameraOff': 'Camera is off. Tap Open camera to scan.',
@@ -484,6 +502,17 @@ class AppLocalizations {
           'May naitala nang oras ang manggagawang ito sa oras na iyon. Tingnan ang ibang talaan.',
       'errAdminAction': 'Hindi natapos ang aksyon. Subukan muli.',
       'errSettingInvalid': 'Hindi pinapayagan ang halagang ito sa setting na ito.',
+      'errDevicePending':
+          'Naghihintay ng pag-apruba ang teleponong ito. Hilingin sa admin na aprubahan ito.',
+      'errDeviceNotApproved':
+          'Hindi pa rehistrado ang teleponong ito. Mag-log in muli para marehistro ito.',
+      'errDeviceRevoked':
+          'Hindi na pinapayagan ang teleponong ito. Magtanong sa admin.',
+      'errNoActiveField':
+          'Wala ka pang field. Hilingin sa admin na magtalaga ng isa.',
+      'errScanOffline':
+          'Hindi maabot ang server. Kumonekta sa internet, saka pindutin ang Subukan muli.',
+      'scanLoading': 'Inihahanda ang iyong field...',
       'cameraOpen': 'Buksan ang camera',
       'cameraClose': 'Isara ang camera',
       'cameraOff': 'Nakasara ang camera. Pindutin ang Buksan ang camera para mag-scan.',

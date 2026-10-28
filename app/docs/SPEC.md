@@ -20,8 +20,8 @@ Workers never use the app. If a worker wants to know their status, they ask a te
 
 | Role | ID prefix | What they can do |
 | :---- | :---- | :---- |
-| **Super Admin** | (own account) | Permission control, audit logs, scan hours and retention settings, manage admins |
-| **Admin** | A- | Add, view, and delete workers, fields, and technicians. Assign technicians to fields. Create technician accounts. Monitor field days and statistics. End a technician's field day manually. Add or fix missing time records by hand. Export the weekly masterlist. |
+| **Super Admin** | (own account) | Permission control, audit logs, retention settings, manage admins |
+| **Admin** | A- | Add, view, and delete workers, fields, and technicians. Assign technicians to fields. Create technician accounts. Monitor field days and statistics. End a technician's field day manually. Add or fix missing time records by hand. Export the weekly masterlist. Set the allowed scan hours and the reminder time. |
 | **Technician** (also called staff) | T- | Scan workers in and out, tap End field day, monitor their own field, and look up a worker's time record for the current week (Monday to Sunday) when a worker asks. Nothing else. |
 | **Worker** | W- | A record only. No login and no app. Identified by the printed QR card. |
 
@@ -81,7 +81,7 @@ Admins create the login for each technician. Many technicians may not have an em
 
 * A repeat scan of the same card within about 30 seconds is ignored (accidental double scan).  
 * A scan on a new date is always a new time in. It never becomes the previous day's time out.  
-* A scan for an inactive worker, field, or technician is blocked with a clear message. A scan outside the allowed scan hours (set by the Super Admin, for example 4:00 AM to 9:00 PM) is saved but flagged for the admin.  
+* A scan for an inactive worker, field, or technician is blocked with a clear message. A scan outside the allowed scan hours (set by the admin, for example 4:00 AM to 9:00 PM) is saved but flagged for the admin.  
 * Technicians cannot edit times. Corrections are made by an admin and recorded in the audit log.  
 * Every scan saves the technician and the field, so old weeks always show the correct names, even if a technician changes fields later.
 
@@ -361,7 +361,7 @@ No system can be completely hacker-proof. The goal is to make theft harder, limi
 
 A person with a technician's username and password could try to log in somewhere else and scan their own card. To make this harder to do and easy to notice:
 
-* Scans are accepted only during the **allowed scan hours**, for example 4:00 AM to 9:00 PM. The Super Admin can change these hours in settings. A scan outside them is saved but flagged for the admin.  
+* Scans are accepted only during the **allowed scan hours**, for example 4:00 AM to 9:00 PM. The admin can change these hours in settings. A scan outside them is saved but flagged for the admin.  
 * Every scan quietly saves the phone's **location**, if the technician allows it. Nothing is checked or blocked automatically. If the admin suspects a problem, they can open that scan and see where it happened.  
 * If a technician refuses location access, scans are still saved without a location, and the admin sees a note. Scanning never stops.
 

@@ -79,7 +79,7 @@ Wire format: timestamps are ISO 8601 in UTC with `Z` (`2026-10-19T22:02:00Z`). D
 
 | Role value | Notes |
 | --- | --- |
-| `super_admin` | Can do everything an admin can, plus audit logs, scan hours, retention, and managing admins |
+| `super_admin` | Can do everything an admin can, plus audit logs, retention, and managing admins |
 | `admin` | Everything in spec section 2 for Admin |
 | `technician` | Scanner, End field day, own field, worker lookup for the current week. Nothing else. |
 
@@ -793,8 +793,8 @@ Value types are fixed. Times are `"HH:MM"` in Philippine time.
 | `reminder_time` | `"17:00"` | time | admin | When the "not ended" check runs |
 | `reminder_repeat_minutes` | `30` | int, 5 to 120 | admin | Wait before the one repeat reminder |
 | `technician_reminder_enabled` | `true` | bool | admin | Gentle reminder on the technician phone at `reminder_time` |
-| `scan_hours_start` | `"04:00"` | time | super admin | Start of allowed scan hours |
-| `scan_hours_end` | `"21:00"` | time | super admin | End of allowed scan hours |
+| `scan_hours_start` | `"04:00"` | time | admin | Start of allowed scan hours |
+| `scan_hours_end` | `"21:00"` | time | admin | End of allowed scan hours |
 | `attendance_retention_days` | `15` | int, 7 to 365 | super admin | See Section 9 |
 | `audit_retention_days` | `15` | int, 1 to 365 | super admin | See Section 9 |
 | `retention_notice_days` | `3` | int, 1 to 14 | super admin | Days of warning before deletion **[P]** |
@@ -840,7 +840,11 @@ Value types are fixed. Times are `"HH:MM"` in Philippine time.
 | `005_phase2_remediation.sql` | B (A reviews) | `get_login_state`, corrected function volatility, and contract-aligned RLS/table privileges |
 | `006_phase4_admin.sql` | B | Phase 4 admin dashboard, flagged activity, statistics, manual field-day ending, manual corrections, QR reissue, and CSV import |
 | `006_masterlist.sql` | B (A tests lookup) | Section 4.13, fixture, tests |
-| `007_jobs_retention.sql` | B | Section 9 jobs |
+| `007_worker_admin.sql` to `011_worker_audit_fix.sql` | B | Phase 4 worker, field, device and admin tool functions (already applied) |
+| `012_field_days_admin.sql` | B | `get_today_field_days`, `suggest_end_time`, `admin_end_field_day` (sections 4.8, 4.9) |
+| `013_settings_validation.sql` | B | `admin_set_setting` validates `HH:MM` and boolean values (`E_SETTING_INVALID`) |
+| `014_settings_admin_scan_hours.sql` | B | Admins may change scan hours (section 14) |
+| `0NN_jobs_retention.sql` (planned) | B | Section 9 jobs. Next free number after the migrations above |
 
 App side (A): everything in Section 6 and 8, the scanner, End field day, and the technician screens. Both of you: this file, `core/l10n`, `core/router`, `core/theme`.
 
@@ -871,6 +875,7 @@ Each item has a recommended answer. Tick one when agreed.
 | --- | --- | --- | --- |
 | 2026-10-27 | 0.1 | draft | First draft from the spec and the build guide |
 | 2026-10-28 | 0.1 | project note | Phase 3 integration verification is pending: technician account provisioning, field/worker test data, offline-to-Supabase sync, retry idempotency, role checks, and end-field-day behavior must be tested through the UI against the development project. Phase 4 may proceed, but Phase 3 is not signed off until these tests pass. |
+| 2026-10-29 | 0.1 | project note | Section 4.9: `get_today_field_days` also returns `field_day_id` and `work_date`. Migrations 012 to 014 added (section 16). Section 14: admins (not only the super admin) change `scan_hours_start` and `scan_hours_end`, a company decision; SPEC section 2 updated in the same change. The technician app now calls `register_device` before `get_my_context` (sections 4.2, 4.4). |
 
 ---
 

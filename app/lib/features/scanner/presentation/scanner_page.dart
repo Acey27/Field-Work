@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -14,6 +15,7 @@ import '../../auth/data/device_service.dart';
 import '../data/scan_repository.dart';
 import '../data/sync_service.dart';
 import '../domain/scan_decision.dart';
+import '../domain/scan_readiness.dart';
 import 'scan_feedback.dart';
 
 class ScannerPage extends StatefulWidget {
@@ -38,6 +40,8 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   Timer? _feedbackTimer;
   ScanContext? _scanContext;
+  ScanReadiness _readiness = ScanReadiness.loading;
+  bool _contextRequested = false;
   String _status = 'offline';
   bool _busy = false;
   bool _syncing = false;
@@ -119,23 +123,57 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
     }
   }
 
+  /// Registers this phone (first phone is approved at once, CONTRACT.md 4.2),
+  /// then loads the technician and field. Any problem is shown to the
+  /// technician instead of being ignored.
   Future<void> _loadContext() async {
+    if (_readiness == ScanReadiness.loading && _contextRequested) return;
+    _contextRequested = true;
+    if (mounted) setState(() => _readiness = ScanReadiness.loading);
     try {
-      final response = await DeviceService().context();
-      final profile = response['profile'];
-      final field = response['field'];
-      if (!mounted || profile is! Map || field is! Map) return;
+      final devices = DeviceService();
+      await devices.register(label: _deviceLabel());
+      final response = await devices.context();
+      if (!mounted) return;
+      final readiness = readinessFromContext(response);
+      if (readiness == ScanReadiness.ready) {
+        final profile = response['profile'] as Map;
+        final field = response['field'] as Map;
+        setState(() {
+          _scanContext = ScanContext(
+            technicianId: profile['id'] as String,
+            fieldId: field['id'] as String,
+          );
+          _readiness = readiness;
+        });
+        await _sync();
+      } else {
+        setState(() {
+          _scanContext = null;
+          _readiness = readiness;
+        });
+      }
+    } on PostgrestException catch (error) {
+      if (!mounted) return;
       setState(() {
-        _scanContext = ScanContext(
-          technicianId: profile['id'] as String,
-          fieldId: field['id'] as String,
-        );
+        _scanContext = null;
+        _readiness = readinessFromCode(error.message);
+        _status = 'offline';
       });
-      await _sync();
     } catch (_) {
-      if (mounted) setState(() => _status = 'offline');
+      if (!mounted) return;
+      setState(() {
+        _scanContext = null;
+        _readiness = ScanReadiness.offline;
+        _status = 'offline';
+      });
+    } finally {
+      _contextRequested = false;
     }
   }
+
+  String _deviceLabel() =>
+      kIsWeb ? 'Web browser' : '${defaultTargetPlatform.name} phone';
 
   Future<void> _refreshPendingCount() async {
     final count = await _database.pendingCount();
@@ -226,7 +264,8 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       );
       final scanContext = _scanContext;
       if (scanContext == null) {
-        _setFeedback(ScanFeedback(ScanFeedbackKind.error, l10n.scanNotReady));
+        // Say why scanning is not ready instead of a generic message.
+        _setFeedback(feedbackForReadiness(l10n, _readiness));
         return;
       }
       final result = await _repository.processScan(
@@ -327,11 +366,18 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       'online' => l10n.online,
       _ => l10n.offlineWithPending(_pendingCount),
     };
-    final feedback = _cameraOn
-        ? (_feedback.kind == ScanFeedbackKind.idle
-              ? ScanFeedback(ScanFeedbackKind.idle, l10n.scanLooking)
-              : _feedback)
-        : ScanFeedback(ScanFeedbackKind.idle, l10n.cameraOff);
+    final notReady = _readiness != ScanReadiness.ready;
+    final ScanFeedback feedback;
+    if (!_cameraOn) {
+      feedback = ScanFeedback(ScanFeedbackKind.idle, l10n.cameraOff);
+    } else if (_feedback.kind != ScanFeedbackKind.idle) {
+      feedback = _feedback;
+    } else if (notReady) {
+      // Never say "Looking for a QR code" while scanning cannot work.
+      feedback = feedbackForReadiness(l10n, _readiness);
+    } else {
+      feedback = ScanFeedback(ScanFeedbackKind.idle, l10n.scanLooking);
+    }
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.scan),
@@ -350,11 +396,11 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
               icon: const Icon(Icons.sync),
             ),
           ),
-          if (_scanContext == null)
+          if (notReady && _readiness != ScanReadiness.loading)
             MaterialBanner(
-              content: Text(l10n.scanNotReady),
+              content: Text(feedbackForReadiness(l10n, _readiness).message),
               actions: [
-                TextButton(onPressed: _syncOrLoad, child: Text(l10n.retry)),
+                TextButton(onPressed: _loadContext, child: Text(l10n.retry)),
               ],
             ),
           Expanded(

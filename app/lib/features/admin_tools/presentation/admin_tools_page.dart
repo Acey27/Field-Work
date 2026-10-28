@@ -135,13 +135,20 @@ class _AdminToolsPageState extends State<AdminToolsPage> {
     final value = formatClock24(picked.hour, picked.minute);
     try {
       await _service.setSetting(key, value);
+      // Read it back: "Saved" is shown only if the database really has it.
+      final stored = await _service.timeSettings();
       if (!mounted) return;
-      setState(() => _times = {..._times, key: value});
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l10n.saved)));
+      setState(() => _times = stored.isEmpty ? {..._times, key: value} : stored);
+      if (stored.isNotEmpty && stored[key] != value) {
+        _showError(l10n);
+        return;
+      }
+      _showMessage(l10n.saved);
     } on PostgrestException catch (error) {
+      debugPrint('admin_set_setting $key failed: ${error.message}');
       if (mounted) _showMessage(l10n.adminError(error.message));
-    } on Object {
+    } on Object catch (error) {
+      debugPrint('admin_set_setting $key failed: $error');
       if (mounted) _showError(l10n);
     }
   }
