@@ -838,7 +838,7 @@ Value types are fixed. Times are `"HH:MM"` in Philippine time.
 | `003_rls.sql` | B (A reviews) | Section 7, role helpers, `revoke`/`grant` on functions, `tests/roles.sql` |
 | `004_scan_functions.sql` | B (A reviews) | `register_device`, `get_my_context`, `get_worker_cache`, `ingest_scans`, `end_field_day`, `get_my_field_day`, `get_worker_week` |
 | `005_phase2_remediation.sql` | B (A reviews) | `get_login_state`, corrected function volatility, and contract-aligned RLS/table privileges |
-| `005_admin_functions.sql` | B | Section 4.8, 4.9, 4.12, 4.14, 4.15 |
+| `006_phase4_admin.sql` | B | Phase 4 admin dashboard, flagged activity, statistics, manual field-day ending, manual corrections, QR reissue, and CSV import |
 | `006_masterlist.sql` | B (A tests lookup) | Section 4.13, fixture, tests |
 | `007_jobs_retention.sql` | B | Section 9 jobs |
 

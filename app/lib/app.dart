@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:go_router/go_router.dart';
 
 import 'core/l10n/app_localizations.dart';
 import 'core/router/app_router.dart';
@@ -15,6 +17,13 @@ class AttendanceApp extends StatefulWidget {
 
 class _AttendanceAppState extends State<AttendanceApp> {
   late Locale _locale = widget.initialLocale;
+  late final GoRouter _router;
+
+  @override
+  void initState() {
+    super.initState();
+    _router = buildRouter(_setLocale);
+  }
 
   void _setLocale(Locale locale) {
     setState(() => _locale = locale);
@@ -27,9 +36,14 @@ class _AttendanceAppState extends State<AttendanceApp> {
       onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
       theme: AppTheme.light,
       locale: _locale,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       supportedLocales: AppLocalizations.supportedLocales,
-      routerConfig: buildRouter(_setLocale),
+      routerConfig: _router,
     );
   }
 }

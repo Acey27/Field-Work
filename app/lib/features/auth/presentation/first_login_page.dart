@@ -55,7 +55,7 @@ class _FirstLoginPageState extends State<FirstLoginPage> {
     } on AuthException catch (error) {
       if (mounted) setState(() => _error = l10n.authError(error.message));
     } catch (_) {
-      if (mounted) setState(() => _error = l10n.authError('E_FORBIDDEN'));
+      if (mounted) setState(() => _error = l10n.authError('E_LOGIN_FAILED'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

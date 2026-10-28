@@ -7,6 +7,10 @@ import '../../features/auth/presentation/first_login_page.dart';
 import '../../features/dashboard/presentation/dashboard_page.dart';
 import '../../features/scanner/presentation/scanner_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
+import '../../features/workers/presentation/workers_page.dart';
+import '../../features/fields/presentation/fields_page.dart';
+import '../../features/technicians/presentation/technicians_page.dart';
+import '../../features/admin_tools/presentation/admin_tools_page.dart';
 import '../l10n/app_localizations.dart';
 
 final selectedRoleProvider = NotifierProvider<RoleNotifier, AppRole>(
@@ -45,8 +49,33 @@ GoRouter buildRouter(ValueChanged<Locale> onLocaleChanged) {
       ),
       GoRoute(
         path: '/admin',
+        builder: (context, state) => DashboardPage(
+          onLocaleChanged: onLocaleChanged,
+          onWorkers: () => context.go('/admin/workers'),
+          onFields: () => context.go('/admin/fields'),
+          onTechnicians: () => context.go('/admin/technicians'),
+          onAdminTools: () => context.go('/admin/tools'),
+        ),
+      ),
+      GoRoute(
+        path: '/admin/workers',
         builder: (context, state) =>
-            DashboardPage(onLocaleChanged: onLocaleChanged),
+            WorkersPage(onLocaleChanged: onLocaleChanged),
+      ),
+      GoRoute(
+        path: '/admin/fields',
+        builder: (context, state) =>
+            FieldsPage(onLocaleChanged: onLocaleChanged),
+      ),
+      GoRoute(
+        path: '/admin/technicians',
+        builder: (context, state) =>
+            TechniciansPage(onLocaleChanged: onLocaleChanged),
+      ),
+      GoRoute(
+        path: '/admin/tools',
+        builder: (context, state) =>
+            AdminToolsPage(onLocaleChanged: onLocaleChanged),
       ),
       GoRoute(
         path: '/super-admin',

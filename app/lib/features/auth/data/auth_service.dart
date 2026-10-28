@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/supabase/supabase_client.dart';
 
@@ -12,20 +13,41 @@ class AuthService {
     if (!SupabaseConfig.isConfigured) {
       throw const AuthException('E_SERVER_CONFIG');
     }
-    final response = await _client.auth.signInWithPassword(
-      email: email,
-      password: password,
-    );
+    AuthResponse response;
+    try {
+      response = await _client.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+    } on AuthException catch (error) {
+      final message = error.message.toLowerCase();
+      if (message.contains('invalid login credentials') ||
+          message.contains('invalid email or password') ||
+          message == 'e_forbidden') {
+        throw const AuthException('E_INVALID_LOGIN');
+      }
+      rethrow;
+    }
     final userId = response.user?.id;
-    if (userId == null) throw const AuthException('E_FORBIDDEN');
-    final state = await _client.rpc<Map<String, dynamic>>('get_login_state');
+    if (userId == null) throw const AuthException('E_INVALID_LOGIN');
+    late final Map<String, dynamic> state;
+    try {
+      state = await _client.rpc<Map<String, dynamic>>('get_login_state');
+    } on Object catch (error, stackTrace) {
+      debugPrint('get_login_state failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      throw const AuthException('E_LOGIN_STATE_FAILED');
+    }
     if (state.isEmpty) {
       throw const AuthException('E_ACCOUNT_DISABLED');
     }
-    return AuthState(
-      role: state['role'] as String,
-      mustChangePassword: state['must_change_password'] == true,
-    );
+    final role = state['role'];
+    final mustChangePassword = state['must_change_password'];
+    if (role is! String || mustChangePassword is! bool) {
+      debugPrint('get_login_state returned an invalid profile payload: $state');
+      throw const AuthException('E_LOGIN_STATE_FAILED');
+    }
+    return AuthState(role: role, mustChangePassword: mustChangePassword);
   }
 
   Future<void> completeFirstLogin(String newPassword) async {

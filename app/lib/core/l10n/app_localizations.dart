@@ -7,9 +7,7 @@ class AppLocalizations {
   final Locale locale;
 
   static const supportedLocales = [Locale('en'), Locale('fil')];
-  static const localizationsDelegates = <LocalizationsDelegate<Object>>[
-    _AppLocalizationsDelegate(),
-  ];
+  static const delegate = _AppLocalizationsDelegate();
 
   static AppLocalizations of(BuildContext context) {
     return Localizations.of<AppLocalizations>(context, AppLocalizations) ??
@@ -58,7 +56,14 @@ class AppLocalizations {
     'E_MUST_CHANGE_PASSWORD' => _text('errMustChangePassword'),
     'E_PASSWORD_WEAK' => _text('errPasswordWeak'),
     'E_PASSWORD_UPDATE_FAILED' => _text('errPasswordUpdateFailed'),
-    _ => _text('errForbidden'),
+    'E_EMAIL_TAKEN' => _text('errEmailTaken'),
+    'E_ACCOUNT_CREATE_FAILED' => _text('errAccountCreateFailed'),
+    'E_INPUT_INVALID' => _text('errAdminInput'),
+    'E_INVALID_LOGIN' => _text('errInvalidLogin'),
+    'E_LOGIN_STATE_FAILED' => _text('errLoginStateFailed'),
+    'E_LOGIN_FAILED' => _text('errLoginFailed'),
+    'E_WORKER_NOT_FOUND' => _text('errWorkerNotFound'),
+    _ => _text('errLoginFailed'),
   };
   String get passwordHint => _text('passwordHint');
   String get firstLoginTitle => _text('firstLoginTitle');
@@ -67,6 +72,95 @@ class AppLocalizations {
   String get confirmPassword => _text('confirmPassword');
   String get savePassword => _text('savePassword');
   String get errPasswordChangeInvalid => _text('errPasswordChangeInvalid');
+  String get refresh => _text('refresh');
+  String get adminLoadError => _text('adminLoadError');
+  String get todayFieldDays => _text('todayFieldDays');
+  String get noFieldDays => _text('noFieldDays');
+  String get flaggedActivity => _text('flaggedActivity');
+  String get noFlaggedActivity => _text('noFlaggedActivity');
+  String get workersPresent => _text('workersPresent');
+  String get totalMinutes => _text('totalMinutes');
+  String get fieldDays => _text('fieldDays');
+  String get notEnded => _text('notEnded');
+  String get noField => _text('noField');
+  String get openWorkers => _text('openWorkers');
+  String get ended => _text('ended');
+  String get working => _text('working');
+  String get manualEndFieldDay => _text('manualEndFieldDay');
+  String get reason => _text('reason');
+  String get cancel => _text('cancel');
+  String get fieldDayEnded => _text('fieldDayEnded');
+  String get retry => _text('retry');
+  String get workers => _text('workers');
+  String get fields => _text('fields');
+  String get technicians => _text('technicians');
+  String get manageTechnicians => _text('manageTechnicians');
+  String get createTechnician => _text('createTechnician');
+  String get assignField => _text('assignField');
+  String get pendingDevices => _text('pendingDevices');
+  String get technicianOperationFailed => _text('technicianOperationFailed');
+  String get deviceApprovals => _text('deviceApprovals');
+  String get device => _text('device');
+  String get approveDevice => _text('approveDevice');
+  String get revokeDevice => _text('revokeDevice');
+  String get adminTools => _text('adminTools');
+  String get scanHoursStart => _text('scanHoursStart');
+  String get scanHoursEnd => _text('scanHoursEnd');
+  String get reminderTime => _text('reminderTime');
+  String get timeFormat => _text('timeFormat');
+  String get manualTimeRecord => _text('manualTimeRecord');
+  String get manualTimeRecordHint => _text('manualTimeRecordHint');
+  String get addTimeRecord => _text('addTimeRecord');
+  String get weeklyMasterlist => _text('weeklyMasterlist');
+  String get loadMasterlist => _text('loadMasterlist');
+  String get workerId => _text('workerId');
+  String get fieldId => _text('fieldId');
+  String get technicianId => _text('technicianId');
+  String get workDate => _text('workDate');
+  String get timeIn => _text('timeIn');
+  String get timeOut => _text('timeOut');
+  String get saved => _text('saved');
+  String get adminToolsOperationFailed => _text('adminToolsOperationFailed');
+  String get manageWorkers => _text('manageWorkers');
+  String get manageFields => _text('manageFields');
+  String get addField => _text('addField');
+  String get searchFields => _text('searchFields');
+  String get noFields => _text('noFields');
+  String get fieldName => _text('fieldName');
+  String get location => _text('location');
+  String get fieldOperationFailed => _text('fieldOperationFailed');
+  String get addWorker => _text('addWorker');
+  String get editWorker => _text('editWorker');
+  String get searchWorkers => _text('searchWorkers');
+  String get noWorkers => _text('noWorkers');
+  String get cpNumber => _text('cpNumber');
+  String get address => _text('address');
+  String get save => _text('save');
+  String get qrReissued => _text('qrReissued');
+  String get active => _text('active');
+  String get inactive => _text('inactive');
+  String get activate => _text('activate');
+  String get deactivate => _text('deactivate');
+  String get reissueCard => _text('reissueCard');
+  String get workerOperationFailed => _text('workerOperationFailed');
+  String get importWorkers => _text('importWorkers');
+  String get csvData => _text('csvData');
+  String get importPreview => _text('importPreview');
+  String get validRows => _text('validRows');
+  String get invalidRows => _text('invalidRows');
+  String get duplicateRows => _text('duplicateRows');
+  String get preview => _text('preview');
+  String get import => _text('import');
+  String get printCard => _text('printCard');
+  String get adminAccounts => _text('adminAccounts');
+  String get adminAccountDescription => _text('adminAccountDescription');
+  String get fullName => _text('fullName');
+  String get startingPassword => _text('startingPassword');
+  String get startingPasswordHint => _text('startingPasswordHint');
+  String get createAdmin => _text('createAdmin');
+  String get errAdminInput => _text('errAdminInput');
+  String adminCreated(String code) =>
+      _text('adminCreated').replaceFirst('{code}', code);
 
   String _text(String key) {
     Intl.defaultLocale = locale.languageCode;
@@ -127,6 +221,105 @@ class AppLocalizations {
       'savePassword': 'Save password',
       'errPasswordChangeInvalid':
           'Passwords must match and contain at least 10 characters.',
+      'refresh': 'Refresh',
+      'adminLoadError':
+          'The admin data could not be loaded. Check access and try again.',
+      'todayFieldDays': "Today's field days",
+      'noFieldDays': 'No active technicians were found for today.',
+      'flaggedActivity': 'Flagged activity',
+      'noFlaggedActivity': 'No flagged activity for today.',
+      'workersPresent': 'Workers present',
+      'totalMinutes': 'Total minutes',
+      'fieldDays': 'Field days',
+      'notEnded': 'Not ended',
+      'noField': 'No field',
+      'openWorkers': 'workers still open',
+      'ended': 'Ended',
+      'working': 'Working',
+      'manualEndFieldDay': 'End field day manually',
+      'reason': 'Reason',
+      'cancel': 'Cancel',
+      'fieldDayEnded': 'The field day was ended.',
+      'retry': 'Try again',
+      'workers': 'Workers',
+      'fields': 'Fields',
+      'technicians': 'Technicians',
+      'manageTechnicians': 'Manage technicians',
+      'createTechnician': 'Create technician',
+      'assignField': 'Assign field',
+      'pendingDevices': 'pending devices',
+      'technicianOperationFailed': 'The technician action could not be completed. Refresh and try again.',
+      'deviceApprovals': 'Device approvals',
+      'device': 'Device',
+      'approveDevice': 'Approve device',
+      'revokeDevice': 'Revoke device',
+      'adminTools': 'Admin tools',
+      'scanHoursStart': 'Scan hours start',
+      'scanHoursEnd': 'Scan hours end',
+      'reminderTime': 'Reminder time',
+      'timeFormat': 'Time (HH:MM)',
+      'manualTimeRecord': 'Manual time record',
+      'manualTimeRecordHint': 'Use database IDs for the field and technician. The reason is required and audited.',
+      'addTimeRecord': 'Add time record',
+      'weeklyMasterlist': 'Weekly masterlist',
+      'loadMasterlist': 'Load masterlist',
+      'workerId': 'Worker ID',
+      'fieldId': 'Field ID',
+      'technicianId': 'Technician ID',
+      'workDate': 'Work date (YYYY-MM-DD)',
+      'timeIn': 'Time in (HH:MM)',
+      'timeOut': 'Time out (HH:MM)',
+      'saved': 'Saved',
+      'adminToolsOperationFailed': 'The admin operation could not be completed. Check the values and try again.',
+      'manageWorkers': 'Manage workers',
+      'manageFields': 'Manage fields',
+      'addField': 'Add field',
+      'searchFields': 'Search fields',
+      'noFields': 'No fields found.',
+      'fieldName': 'Field name',
+      'location': 'Location',
+      'fieldOperationFailed':
+          'The field action could not be completed. Refresh and try again.',
+      'addWorker': 'Add worker',
+      'editWorker': 'Edit worker',
+      'searchWorkers': 'Search by name or Worker ID',
+      'noWorkers': 'No workers found.',
+      'cpNumber': 'CP number',
+      'address': 'Address',
+      'save': 'Save',
+      'qrReissued': 'QR card reissued',
+      'active': 'Active',
+      'inactive': 'Inactive',
+      'activate': 'Activate',
+      'deactivate': 'Deactivate',
+      'reissueCard': 'Reissue QR card',
+      'workerOperationFailed':
+          'The worker action could not be completed. Refresh and try again.',
+      'importWorkers': 'Import workers',
+      'csvData': 'Paste CSV data',
+      'importPreview': 'Import preview',
+      'validRows': 'Valid rows',
+      'invalidRows': 'Invalid rows',
+      'duplicateRows': 'Possible duplicates',
+      'preview': 'Preview',
+      'import': 'Import',
+      'printCard': 'Print QR card',
+      'adminAccounts': 'Admin accounts',
+      'adminAccountDescription': 'Create an admin with a temporary password. They must choose a new password at first login.',
+      'fullName': 'Full name',
+      'startingPassword': 'Temporary password',
+      'startingPasswordHint': 'At least 10 characters',
+      'createAdmin': 'Create admin account',
+      'errAdminInput': 'Enter a full name, a valid email, and a password with at least 10 characters.',
+      'adminCreated': 'Admin {code} was created. Give them the temporary password securely.',
+      'errEmailTaken': 'This email is already used. Try another email.',
+      'errAccountCreateFailed': 'The account could not be created. Try again.',
+      'errInvalidLogin': 'The email or password is incorrect.',
+      'errLoginStateFailed': 'Login succeeded, but the account profile could not be loaded. Contact your administrator.',
+      'errLoginFailed':
+          'Login could not be completed. Check your connection and try again.',
+      'errWorkerNotFound':
+          'The worker could not be updated. Refresh the list and try again.',
     },
     'fil': {
       'appTitle': 'QR Attendance',
@@ -181,6 +374,103 @@ class AppLocalizations {
       'savePassword': 'I-save ang password',
       'errPasswordChangeInvalid':
           'Dapat magkapareho ang password at may hindi bababa sa 10 character.',
+      'refresh': 'I-refresh',
+      'adminLoadError':
+          'Hindi ma-load ang admin data. Suriin ang access at subukan muli.',
+      'todayFieldDays': 'Mga field day ngayong araw',
+      'noFieldDays': 'Walang aktibong technician para sa araw na ito.',
+      'flaggedActivity': 'Mga na-flag na aktibidad',
+      'noFlaggedActivity': 'Walang na-flag na aktibidad ngayong araw.',
+      'workersPresent': 'Mga manggagawang pumasok',
+      'totalMinutes': 'Kabuuang minuto',
+      'fieldDays': 'Mga field day',
+      'notEnded': 'Hindi pa natatapos',
+      'noField': 'Walang field',
+      'openWorkers': 'manggagawang bukas pa',
+      'ended': 'Natapos',
+      'working': 'Nagtatrabaho',
+      'manualEndFieldDay': 'Manu-manong tapusin ang field day',
+      'reason': 'Dahilan',
+      'cancel': 'Kanselahin',
+      'fieldDayEnded': 'Natapos na ang field day.',
+      'retry': 'Subukan muli',
+      'workers': 'Mga manggagawa',
+      'fields': 'Mga field',
+      'technicians': 'Mga technician',
+      'manageTechnicians': 'Pamahalaan ang mga technician',
+      'createTechnician': 'Gumawa ng technician',
+      'assignField': 'Magtalaga ng field',
+      'pendingDevices': 'nakabinbing device',
+      'technicianOperationFailed': 'Hindi nakumpleto ang aksyon sa technician. I-refresh at subukan muli.',
+      'deviceApprovals': 'Pag-apruba ng device',
+      'device': 'Device',
+      'approveDevice': 'Aprubahan ang device',
+      'revokeDevice': 'Bawiin ang device',
+      'adminTools': 'Mga admin tool',
+      'scanHoursStart': 'Simula ng oras ng scan',
+      'scanHoursEnd': 'Pagtatapos ng oras ng scan',
+      'reminderTime': 'Oras ng paalala',
+      'timeFormat': 'Oras (HH:MM)',
+      'manualTimeRecord': 'Manwal na tala ng oras',
+      'manualTimeRecordHint': 'Gamitin ang database ID ng field at technician. Kailangan ang dahilan at ito ay ia-audit.',
+      'addTimeRecord': 'Magdagdag ng tala ng oras',
+      'weeklyMasterlist': 'Lingguhang masterlist',
+      'loadMasterlist': 'I-load ang masterlist',
+      'workerId': 'Worker ID',
+      'fieldId': 'Field ID',
+      'technicianId': 'Technician ID',
+      'workDate': 'Petsa (YYYY-MM-DD)',
+      'timeIn': 'Oras ng in (HH:MM)',
+      'timeOut': 'Oras ng out (HH:MM)',
+      'saved': 'Nai-save',
+      'adminToolsOperationFailed': 'Hindi nakumpleto ang admin operation. Suriin ang values at subukan muli.',
+      'manageWorkers': 'Pamahalaan ang mga manggagawa',
+      'manageFields': 'Pamahalaan ang mga field',
+      'addField': 'Magdagdag ng field',
+      'searchFields': 'Maghanap ng field',
+      'noFields': 'Walang nahanap na field.',
+      'fieldName': 'Pangalan ng field',
+      'location': 'Lokasyon',
+      'fieldOperationFailed':
+          'Hindi nakumpleto ang aksyon sa field. I-refresh at subukan muli.',
+      'addWorker': 'Magdagdag ng manggagawa',
+      'editWorker': 'I-edit ang manggagawa',
+      'searchWorkers': 'Maghanap ayon sa pangalan o Worker ID',
+      'noWorkers': 'Walang nahanap na manggagawa.',
+      'cpNumber': 'CP number',
+      'address': 'Address',
+      'save': 'I-save',
+      'qrReissued': 'Na-isyu muli ang QR card',
+      'active': 'Aktibo',
+      'inactive': 'Hindi aktibo',
+      'activate': 'I-activate',
+      'deactivate': 'I-deactivate',
+      'reissueCard': 'Mag-isyu muli ng QR card',
+      'workerOperationFailed': 'Hindi nakumpleto ang aksyon sa manggagawa. I-refresh at subukan muli.',
+      'importWorkers': 'Mag-import ng manggagawa',
+      'csvData': 'I-paste ang CSV data',
+      'importPreview': 'Preview ng import',
+      'validRows': 'Balidong row',
+      'invalidRows': 'Hindi balidong row',
+      'duplicateRows': 'Posibleng duplicate',
+      'preview': 'Preview',
+      'import': 'Mag-import',
+      'printCard': 'I-print ang QR card',
+      'adminAccounts': 'Mga admin account',
+      'adminAccountDescription': 'Gumawa ng admin na may pansamantalang password. Dapat itong palitan sa unang login.',
+      'fullName': 'Buong pangalan',
+      'startingPassword': 'Pansamantalang password',
+      'startingPasswordHint': 'Hindi bababa sa 10 character',
+      'createAdmin': 'Gumawa ng admin account',
+      'errAdminInput': 'Maglagay ng buong pangalan, wastong email, at password na may hindi bababa sa 10 character.',
+      'adminCreated': 'Nagawa ang admin {code}. Ibigay nang ligtas ang pansamantalang password.',
+      'errEmailTaken': 'Ginagamit na ang email na ito. Sumubok ng iba.',
+      'errAccountCreateFailed': 'Hindi nagawa ang account. Subukan muli.',
+      'errInvalidLogin': 'Mali ang email o password.',
+      'errLoginStateFailed': 'Nagtagumpay ang login ngunit hindi ma-load ang profile. Makipag-ugnayan sa administrator.',
+      'errLoginFailed':
+          'Hindi nakumpleto ang login. Suriin ang koneksyon at subukan muli.',
+      'errWorkerNotFound': 'Hindi na-update ang manggagawa. I-refresh ang listahan at subukan muli.',
     },
   };
 }

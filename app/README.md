@@ -1,10 +1,13 @@
 # QR Attendance
 
 This is the Flutter app for the Echague, Isabela QR attendance system. It
-targets Android and web from one platform-neutral codebase. Phase 2 adds
-protected database access, email/password authentication, technician account
-provisioning, and device registration/approval. Attendance syncing is a later
-phase.
+targets Android and web from one platform-neutral codebase. Phase 2 adds protected database access, email/password authentication,
+technician account provisioning, and device registration/approval. Phase 4 adds the admin monitoring dashboard and management surfaces backed by
+Supabase RPCs: workers, fields, technician accounts and assignments, device
+approvals, CSV worker import preview/commit, printable QR cards, weekly
+masterlist viewing, manual time records, settings, statistics, flagged scans,
+and audited manual field-day ending. Complete Phase 3 development-project
+verification remains part of the rollout gate.
 
 ## Requirements
 
@@ -65,14 +68,17 @@ dart format lib test
 The Philippine-time tests cover the 15:59/16:00 UTC date boundary, Monday week
 starts, exact hours, 61 minutes, and zero minutes.
 
-## Scaffold navigation
+## Admin navigation
 
-The login screen has placeholder role selection so the three destinations can
-be previewed:
+The login screen routes authenticated users by role:
 
-- Technician: scanner placeholder and large **End field day** button
-- Admin: dashboard placeholder
-- Super admin: settings placeholder
+- Technician: scanner and field-day workflow
+- Admin: dashboard, workers, fields, technicians, device approvals, and admin tools
+- Super admin: admin-account provisioning and settings
+
+Worker Management also supports editing, CSV preview/commit, QR reissue, and
+printable QR cards. Admin Tools provides weekly masterlist data, audited manual
+time records, and scan/reminder settings.
 
 The English/Filipino toggle is stored on the device using
 `SharedPreferences`.

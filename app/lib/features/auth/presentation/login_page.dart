@@ -60,8 +60,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       if (mounted) {
         setState(() => _error = l10n.authError(error.message));
       }
-    } catch (_) {
-      if (mounted) setState(() => _error = l10n.authError('E_FORBIDDEN'));
+    } on Object catch (error, stackTrace) {
+      debugPrint('login failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (mounted) {
+        setState(() => _error = l10n.authError('E_LOGIN_FAILED'));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
