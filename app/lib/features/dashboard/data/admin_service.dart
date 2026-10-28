@@ -7,8 +7,22 @@ class AdminService {
 
   Future<List<Map<String, dynamic>>> todayFieldDays() async {
     _requireConfigured();
-    final value = await _client.rpc<List<dynamic>>('admin_today_field_days');
+    final value = await _client.rpc<List<dynamic>>('get_today_field_days');
     return _rows(value);
+  }
+
+  /// The technician's last scan of [workDate] (UTC), or null if none.
+  Future<DateTime?> suggestEndTime({
+    required String technicianId,
+    required String workDate,
+  }) async {
+    _requireConfigured();
+    final value = await _client.rpc<Map<String, dynamic>>(
+      'suggest_end_time',
+      params: {'p_technician_id': technicianId, 'p_work_date': workDate},
+    );
+    final time = value['time'] as String?;
+    return time == null ? null : DateTime.parse(time).toUtc();
   }
 
   Future<Map<String, dynamic>> statistics() async {
@@ -24,13 +38,20 @@ class AdminService {
   }
 
   Future<Map<String, dynamic>> endFieldDay({
-    required String fieldDayId,
+    required String technicianId,
+    required String workDate,
+    required DateTime endedAt,
     required String reason,
   }) async {
     _requireConfigured();
     final value = await _client.rpc<Map<String, dynamic>>(
       'admin_end_field_day',
-      params: {'p_field_day_id': fieldDayId, 'p_reason': reason},
+      params: {
+        'p_technician_id': technicianId,
+        'p_work_date': workDate,
+        'p_ended_at': endedAt.toUtc().toIso8601String(),
+        'p_reason': reason,
+      },
     );
     return value;
   }

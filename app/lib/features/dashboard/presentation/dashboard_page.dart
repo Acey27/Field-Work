@@ -3,8 +3,10 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/l10n/app_localizations.dart';
+import '../../../core/utils/ph_time.dart';
 import '../../../shared/widgets/language_toggle.dart';
 import '../data/admin_service.dart';
+import 'end_field_day_dialog.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({
@@ -111,9 +113,9 @@ class _DashboardPageState extends State<DashboardPage> {
                 ...data.fieldDays.map(
                   (row) => _FieldDayTile(
                     row: row,
-                    onEnd: row['status'] == 'working'
-                        ? () => _endFieldDay(row)
-                        : null,
+                    onEnd: row['status'] == 'ended'
+                        ? null
+                        : () => _endFieldDay(row),
                   ),
                 ),
                 if (data.fieldDays.isEmpty)
@@ -139,48 +141,39 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<void> _endFieldDay(Map<String, dynamic> row) async {
     final l10n = AppLocalizations.of(context);
-    final reasonController = TextEditingController();
-    final reason = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.manualEndFieldDay),
-        content: TextField(
-          controller: reasonController,
-          autofocus: true,
-          decoration: InputDecoration(labelText: l10n.reason),
-          minLines: 2,
-          maxLines: 4,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, reasonController.text),
-            child: Text(l10n.confirm),
-          ),
-        ],
-      ),
-    );
-    reasonController.dispose();
-    if (reason == null || reason.trim().isEmpty || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final technicianId = row['technician_id'] as String;
+    final workDate = row['work_date'] as String;
     try {
-      await _service.endFieldDay(
-        fieldDayId: row['field_day_id'] as String,
-        reason: reason,
+      final suggested = await _service.suggestEndTime(
+        technicianId: technicianId,
+        workDate: workDate,
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(l10n.fieldDayEnded)));
-        _refresh();
-      }
+      if (!mounted) return;
+      final choice = await showDialog<EndFieldDayChoice>(
+        context: context,
+        builder: (context) => EndFieldDayDialog(
+          workDate: DateTime.parse('${workDate}T00:00:00Z'),
+          suggested: suggested,
+        ),
+      );
+      if (choice == null || !mounted) return;
+      await _service.endFieldDay(
+        technicianId: technicianId,
+        workDate: workDate,
+        endedAt: choice.endedAt,
+        reason: choice.reason,
+      );
+      messenger.showSnackBar(SnackBar(content: Text(l10n.fieldDayEnded)));
+      if (mounted) _refresh();
+    } on PostgrestException catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.adminError(error.message))),
+      );
     } on AuthException catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.authError(error.message))));
-      }
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.authError(error.message))),
+      );
     }
   }
 }
@@ -249,27 +242,52 @@ class _FieldDayTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final ended = row['status'] == 'ended';
+    final status = row['status'] as String? ?? 'working';
+    final colors = Theme.of(context).colorScheme;
+    final endedAt = DateTime.tryParse('${row['ended_at'] ?? ''}');
+    final lastSync = DateTime.tryParse('${row['last_sync_at'] ?? ''}');
+    final clockedIn = (row['clocked_in_count'] as num?)?.toInt() ?? 0;
+    final worked = (row['worked_count'] as num?)?.toInt() ?? 0;
+    final (icon, color, label) = switch (status) {
+      'ended' => (
+        Icons.check_circle,
+        colors.primary,
+        endedAt == null
+            ? l10n.ended
+            : '${l10n.ended} ${formatPhTime(endedAt)}',
+      ),
+      'not_ended' => (Icons.warning, colors.error, l10n.notEnded),
+      _ => (Icons.work, colors.secondary, l10n.working),
+    };
+    final count = status == 'ended'
+        ? l10n.workedCount(worked)
+        : l10n.clockedInCount(clockedIn);
+    final sync = lastSync == null
+        ? l10n.neverSynced
+        : _syncLabel(lastSync, row['work_date'] as String?);
     return Card(
       child: ListTile(
-        leading: Icon(
-          ended ? Icons.check_circle : Icons.warning,
-          color: ended
-              ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).colorScheme.secondary,
-        ),
+        leading: Icon(icon, color: color),
         title: Text(
-          '${row['full_name'] ?? ''} (${row['technician_code'] ?? ''})',
+          '${row['technician_name'] ?? ''} (${row['technician_code'] ?? ''})',
         ),
         subtitle: Text(
-          '${row['field_name'] ?? l10n.noField} · '
-          '${row['open_workers'] ?? 0} ${l10n.openWorkers}',
+          '${row['field_name'] ?? l10n.noField} · $label\n'
+          '$count · ${l10n.lastSync}: $sync',
         ),
+        isThreeLine: true,
         trailing: onEnd == null
-            ? Text(ended ? l10n.ended : l10n.working)
+            ? null
             : TextButton(onPressed: onEnd, child: Text(l10n.endFieldDay)),
       ),
     );
+  }
+
+  /// Time for today's syncs, date and time for older ones.
+  String _syncLabel(DateTime syncUtc, String? workDate) {
+    final time = formatPhTime(syncUtc);
+    final syncDate = formatPhDate(phDateOf(syncUtc));
+    return syncDate == workDate ? time : '$syncDate $time';
   }
 }
 

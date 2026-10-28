@@ -10,6 +10,33 @@ DateTime phWeekStart(DateTime phDate) {
   return date.subtract(Duration(days: date.weekday - DateTime.monday));
 }
 
+/// `YYYY-MM-DD` for a date-only value (the wire format for dates).
+String formatPhDate(DateTime phDate) {
+  String two(int value) => value.toString().padLeft(2, '0');
+  return '${phDate.year.toString().padLeft(4, '0')}-'
+      '${two(phDate.month)}-${two(phDate.day)}';
+}
+
+/// The UTC instant for [hour]:[minute] Philippine time on [phDate].
+DateTime phTimeToUtc(DateTime phDate, int hour, int minute) {
+  return DateTime.utc(
+    phDate.year,
+    phDate.month,
+    phDate.day,
+    hour,
+    minute,
+  ).subtract(_philippineOffset);
+}
+
+/// Philippine clock time such as `4:52 PM`.
+String formatPhTime(DateTime utc) {
+  final philippines = utc.toUtc().add(_philippineOffset);
+  final hour = philippines.hour % 12 == 0 ? 12 : philippines.hour % 12;
+  final minute = philippines.minute.toString().padLeft(2, '0');
+  final suffix = philippines.hour < 12 ? 'AM' : 'PM';
+  return '$hour:$minute $suffix';
+}
+
 String formatMinutes(int minutes) {
   if (minutes == 0) return '0 minutes';
   final hours = minutes ~/ 60;

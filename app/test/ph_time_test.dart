@@ -23,6 +23,33 @@ void main() {
     expect(phWeekStart(DateTime.utc(2026, 10, 21)), DateTime.utc(2026, 10, 19));
   });
 
+  group('Philippine time of day', () {
+    test('formats the date as YYYY-MM-DD', () {
+      expect(formatPhDate(DateTime.utc(2026, 1, 5)), '2026-01-05');
+    });
+
+    test('converts 4:52 PM Philippine time to 08:52 UTC', () {
+      expect(
+        phTimeToUtc(DateTime.utc(2026, 10, 19), 16, 52),
+        DateTime.utc(2026, 10, 19, 8, 52),
+      );
+    });
+
+    test('converts 12:30 AM Philippine time to the previous UTC day', () {
+      expect(
+        phTimeToUtc(DateTime.utc(2026, 10, 20), 0, 30),
+        DateTime.utc(2026, 10, 19, 16, 30),
+      );
+    });
+
+    test('formats clock times with AM and PM', () {
+      expect(formatPhTime(DateTime.utc(2026, 10, 19, 22, 2)), '6:02 AM');
+      expect(formatPhTime(DateTime.utc(2026, 10, 19, 8, 52)), '4:52 PM');
+      expect(formatPhTime(DateTime.utc(2026, 10, 19, 15, 59)), '11:59 PM');
+      expect(formatPhTime(DateTime.utc(2026, 10, 19, 16)), '12:00 AM');
+    });
+  });
+
   group('formatMinutes', () {
     test('formats exact hours without minutes', () {
       expect(formatMinutes(60), '1 hour');

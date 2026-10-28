@@ -90,6 +90,26 @@ class AppLocalizations {
   String get reason => _text('reason');
   String get cancel => _text('cancel');
   String get fieldDayEnded => _text('fieldDayEnded');
+  String clockedInCount(int count) =>
+      _text('clockedInCount').replaceFirst('{count}', '$count');
+  String workedCount(int count) =>
+      _text('workedCount').replaceFirst('{count}', '$count');
+  String get lastSync => _text('lastSync');
+  String get neverSynced => _text('neverSynced');
+  String endedAt(String time) => _text('endedAt').replaceFirst('{time}', time);
+  String get endTime => _text('endTime');
+  String get suggestedEndTime => _text('suggestedEndTime');
+  String get endTimeRequired => _text('endTimeRequired');
+  String adminError(String code) => switch (code) {
+    'E_REASON_REQUIRED' => _text('errReasonRequired'),
+    'E_TIME_IN_FUTURE' => _text('errTimeInFuture'),
+    'E_DATE_MISMATCH' => _text('errDateMismatch'),
+    'E_TIME_OUT_BEFORE_IN' => _text('errTimeOutBeforeIn'),
+    'E_OVERLAP' => _text('errOverlap'),
+    'E_FIELD_DAY_NOT_FOUND' => _text('errFieldDayNotFound'),
+    'E_FORBIDDEN' => _text('errForbidden'),
+    _ => _text('errAdminAction'),
+  };
   String get retry => _text('retry');
   String get workers => _text('workers');
   String get fields => _text('fields');
@@ -240,6 +260,21 @@ class AppLocalizations {
       'reason': 'Reason',
       'cancel': 'Cancel',
       'fieldDayEnded': 'The field day was ended.',
+      'clockedInCount': '{count} still clocked in',
+      'workedCount': '{count} worked',
+      'lastSync': 'Last sync',
+      'neverSynced': 'Never',
+      'endedAt': 'Ended {time}',
+      'endTime': 'End time',
+      'suggestedEndTime': 'Suggested: last scan of the day',
+      'endTimeRequired': 'Type the end time. There was no scan on this date.',
+      'errReasonRequired': 'Please write a reason.',
+      'errTimeInFuture': 'This time has not happened yet. Check the time.',
+      'errDateMismatch': 'The time must be on the same date.',
+      'errTimeOutBeforeIn': 'Time out must be later than time in.',
+      'errOverlap':
+          'This worker already has time recorded at that time. Check the other records.',
+      'errAdminAction': 'The action could not be completed. Try again.',
       'retry': 'Try again',
       'workers': 'Workers',
       'fields': 'Fields',
@@ -393,6 +428,23 @@ class AppLocalizations {
       'reason': 'Dahilan',
       'cancel': 'Kanselahin',
       'fieldDayEnded': 'Natapos na ang field day.',
+      'clockedInCount': '{count} ang naka-clock in pa',
+      'workedCount': '{count} ang nagtrabaho',
+      'lastSync': 'Huling sync',
+      'neverSynced': 'Wala pa',
+      'endedAt': 'Natapos {time}',
+      'endTime': 'Oras ng pagtatapos',
+      'suggestedEndTime': 'Mungkahi: huling scan ng araw',
+      'endTimeRequired':
+          'I-type ang oras ng pagtatapos. Walang scan sa petsang ito.',
+      'errReasonRequired': 'Magsulat ng dahilan.',
+      'errTimeInFuture': 'Hindi pa dumarating ang oras na ito. Tingnan ang oras.',
+      'errDateMismatch': 'Dapat nasa parehong petsa ang oras.',
+      'errTimeOutBeforeIn':
+          'Dapat mas huli ang oras ng labas kaysa oras ng pasok.',
+      'errOverlap':
+          'May naitala nang oras ang manggagawang ito sa oras na iyon. Tingnan ang ibang talaan.',
+      'errAdminAction': 'Hindi natapos ang aksyon. Subukan muli.',
       'retry': 'Subukan muli',
       'workers': 'Mga manggagawa',
       'fields': 'Mga field',
