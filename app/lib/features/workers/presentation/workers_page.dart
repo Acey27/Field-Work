@@ -5,8 +5,7 @@ import '../../../core/l10n/app_localizations.dart';
 import '../../../shared/widgets/language_toggle.dart';
 import '../data/worker_service.dart';
 import '../data/worker_export_service.dart';
-
-import 'package:csv/csv.dart';
+import 'import_workers_dialog.dart';
 
 class WorkersPage extends StatefulWidget {
   const WorkersPage({required this.onLocaleChanged, super.key});
@@ -46,6 +45,11 @@ class _WorkersPageState extends State<WorkersPage> {
         title: Text(l10n.workers),
         actions: [
           IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
+          IconButton(
+            tooltip: l10n.printAllCards,
+            onPressed: _printAllCards,
+            icon: const Icon(Icons.print),
+          ),
           IconButton(
             tooltip: l10n.importWorkers,
             onPressed: _showImport,
@@ -123,102 +127,37 @@ class _WorkersPageState extends State<WorkersPage> {
     }
   }
 
-  Future<void> _showImport() async {
+  /// One page of cards for every active worker that matches the search.
+  Future<void> _printAllCards() async {
     final l10n = AppLocalizations.of(context);
-    final csvController = TextEditingController();
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.importWorkers),
-        content: SizedBox(
-          width: 640,
-          child: TextField(
-            controller: csvController,
-            minLines: 8,
-            maxLines: 16,
-            decoration: InputDecoration(
-              labelText: l10n.csvData,
-              hintText: 'name,cp_no,address,gender,date_of_birth',
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () async {
-              try {
-                final rows = _parseCsv(csvController.text);
-                final preview = await _exportService.importRows(
-                  rows,
-                  commit: false,
-                );
-                if (!context.mounted) return;
-                final valid = preview['valid'] ?? 0;
-                final errors = (preview['errors'] as List?)?.length ?? 0;
-                final duplicates =
-                    (preview['duplicates'] as List?)?.length ?? 0;
-                final confirmed = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: Text(l10n.importPreview),
-                    content: Text(
-                      '${l10n.validRows}: $valid\n'
-                      '${l10n.invalidRows}: $errors\n'
-                      '${l10n.duplicateRows}: $duplicates',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: Text(l10n.cancel),
-                      ),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        child: Text(l10n.import),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirmed == true) {
-                  await _exportService.importRows(rows, commit: true);
-                  if (context.mounted) Navigator.pop(context, true);
-                }
-              } on Object catch (_) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(l10n.workerOperationFailed)),
-                  );
-                }
-              }
-            },
-            child: Text(l10n.preview),
-          ),
-        ],
-      ),
-    );
-    csvController.dispose();
-    if (result == true) _refresh();
+    final query = _query.toLowerCase();
+    final active = (await _workers).where((w) {
+      final matches =
+          query.isEmpty ||
+          '${w['name']} ${w['id']}'.toLowerCase().contains(query);
+      return matches && w['active'] == true;
+    }).toList();
+    if (!mounted) return;
+    if (active.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.noCardsToPrint)));
+      return;
+    }
+    try {
+      await _exportService.printCards(active);
+    } on Object {
+      if (mounted) _showOperationError(const AuthException(''));
+    }
   }
 
-  List<Map<String, dynamic>> _parseCsv(String source) {
-    final rows = Csv().decode(source);
-    if (rows.isEmpty) return [];
-    final header = rows.first
-        .map((value) => '$value'.trim().toLowerCase())
-        .toList();
-    return [
-      for (var index = 1; index < rows.length; index++)
-        if (rows[index].isNotEmpty)
-          {
-            'row': index + 1,
-            for (var column = 0; column < header.length; column++)
-              header[column]: column < rows[index].length
-                  ? '${rows[index][column]}'.trim()
-                  : '',
-          },
-    ];
+  Future<void> _showImport() async {
+    final imported = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const ImportWorkersDialog(),
+    );
+    if (imported == true) _refresh();
   }
 
   Future<void> _showCreate([Map<String, dynamic>? existing]) async {
@@ -228,66 +167,118 @@ class _WorkersPageState extends State<WorkersPage> {
     final address = TextEditingController(
       text: existing?['address'] as String?,
     );
+    String? gender = existing?['gender'] as String?;
+    DateTime? birthDate = DateTime.tryParse(
+      '${existing?['date_of_birth'] ?? ''}',
+    );
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(existing == null ? l10n.addWorker : l10n.editWorker),
-        content: SingleChildScrollView(
-          child: Column(
-            children: [
-              TextField(
-                controller: name,
-                decoration: InputDecoration(labelText: l10n.fullName),
-              ),
-              TextField(
-                controller: cpNo,
-                decoration: InputDecoration(labelText: l10n.cpNumber),
-              ),
-              TextField(
-                controller: address,
-                decoration: InputDecoration(labelText: l10n.address),
-              ),
-            ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(existing == null ? l10n.addWorker : l10n.editWorker),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: name,
+                  decoration: InputDecoration(labelText: l10n.fullName),
+                ),
+                TextField(
+                  controller: cpNo,
+                  decoration: InputDecoration(labelText: l10n.cpNumber),
+                ),
+                TextField(
+                  controller: address,
+                  decoration: InputDecoration(labelText: l10n.address),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String?>(
+                  initialValue: gender,
+                  decoration: InputDecoration(labelText: l10n.gender),
+                  items: [
+                    DropdownMenuItem(value: null, child: Text(l10n.notSpecified)),
+                    DropdownMenuItem(value: 'male', child: Text(l10n.male)),
+                    DropdownMenuItem(value: 'female', child: Text(l10n.female)),
+                    DropdownMenuItem(
+                      value: 'other',
+                      child: Text(l10n.otherGender),
+                    ),
+                  ],
+                  onChanged: (value) => setDialogState(() => gender = value),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: birthDate ?? DateTime(1990),
+                            firstDate: DateTime(1900),
+                            lastDate: DateTime.now(),
+                          );
+                          if (picked != null) {
+                            setDialogState(() => birthDate = picked);
+                          }
+                        },
+                        icon: const Icon(Icons.cake),
+                        label: Text(
+                          birthDate == null
+                              ? l10n.dateOfBirth
+                              : '${l10n.dateOfBirth}: '
+                                    '${birthDate!.toIso8601String().substring(0, 10)}',
+                        ),
+                      ),
+                    ),
+                    if (birthDate != null)
+                      IconButton(
+                        tooltip: l10n.clearDate,
+                        onPressed: () => setDialogState(() => birthDate = null),
+                        icon: const Icon(Icons.clear),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (name.text.trim().isEmpty) return;
+                try {
+                  if (existing == null) {
+                    await _service.createWorker(
+                      name: name.text,
+                      cpNo: cpNo.text,
+                      address: address.text,
+                      gender: gender,
+                      dateOfBirth: birthDate,
+                    );
+                  } else {
+                    await _service.updateWorker(
+                      workerId: existing['id'] as String,
+                      name: name.text,
+                      cpNo: cpNo.text,
+                      address: address.text,
+                      gender: gender,
+                      dateOfBirth: birthDate,
+                    );
+                  }
+                  if (context.mounted) Navigator.pop(context, true);
+                } on Object catch (error) {
+                  if (mounted) _showOperationError(error);
+                }
+              },
+              child: Text(l10n.save),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () async {
-              if (name.text.trim().isEmpty) return;
-              try {
-                if (existing == null) {
-                  await _service.createWorker(
-                    name: name.text,
-                    cpNo: cpNo.text,
-                    address: address.text,
-                  );
-                } else {
-                  await _service.updateWorker(
-                    workerId: existing['id'] as String,
-                    name: name.text,
-                    cpNo: cpNo.text,
-                    address: address.text,
-                  );
-                }
-                if (context.mounted) Navigator.pop(context, true);
-              } on Object catch (error) {
-                if (context.mounted) {
-                  final code = error is AuthException
-                      ? error.message
-                      : 'E_LOGIN_FAILED';
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(_workerErrorMessage(l10n, code))),
-                  );
-                }
-              }
-            },
-            child: Text(l10n.save),
-          ),
-        ],
       ),
     );
     name.dispose();
@@ -336,7 +327,11 @@ class _WorkersPageState extends State<WorkersPage> {
 
   void _showOperationError(Object error) {
     final l10n = AppLocalizations.of(context);
-    final code = error is AuthException ? error.message : '';
+    final code = switch (error) {
+      AuthException(:final message) => message,
+      PostgrestException(:final message) => message,
+      _ => '',
+    };
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(_workerErrorMessage(l10n, code))));
   }
@@ -344,6 +339,7 @@ class _WorkersPageState extends State<WorkersPage> {
   String _workerErrorMessage(AppLocalizations l10n, String code) {
     if (code == 'E_SERVER_CONFIG') return l10n.authError(code);
     if (code == 'E_INPUT_INVALID') return l10n.authError(code);
+    if (code == 'E_FORBIDDEN') return l10n.adminError(code);
     return l10n.workerOperationFailed;
   }
 }

@@ -85,25 +85,34 @@ class _TechniciansPageState extends State<TechniciansPage> {
               for (final technician in data.technicians)
                 Card(
                   child: ListTile(
-                    leading: const Icon(Icons.badge),
+                    leading: Icon(
+                      technician['active'] == true
+                          ? Icons.badge
+                          : Icons.no_accounts,
+                    ),
                     title: Text(
                       '${technician['full_name']} (${technician['code']})',
                     ),
                     subtitle: Text(
-                      _subtitle(
-                        technician['id'] as String,
-                        assignments,
-                        deviceCounts,
-                        l10n,
-                      ),
+                      '${technician['active'] == true ? '' : '${l10n.accountOff} • '}'
+                      '${_subtitle(technician['id'] as String, assignments, deviceCounts, l10n)}',
                     ),
                     trailing: PopupMenuButton<String>(
-                      onSelected: (value) =>
-                          _assign(technician['id'] as String, fieldsById),
+                      onSelected: (value) => value == 'assign'
+                          ? _assign(technician['id'] as String, fieldsById)
+                          : _toggleActive(technician),
                       itemBuilder: (context) => [
                         PopupMenuItem(
                           value: 'assign',
                           child: Text(l10n.assignField),
+                        ),
+                        PopupMenuItem(
+                          value: 'active',
+                          child: Text(
+                            technician['active'] == true
+                                ? l10n.turnOffAccount
+                                : l10n.turnOnAccount,
+                          ),
                         ),
                       ],
                     ),
@@ -248,6 +257,46 @@ class _TechniciansPageState extends State<TechniciansPage> {
     email.dispose();
     password.dispose();
     if (result == true) _refresh();
+  }
+
+  /// Turning an account off asks first, in plain words (SPEC.md section 14).
+  Future<void> _toggleActive(Map<String, dynamic> technician) async {
+    final l10n = AppLocalizations.of(context);
+    final turnOff = technician['active'] == true;
+    final name = technician['full_name'] as String;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(turnOff ? l10n.turnOffAccount : l10n.turnOnAccount),
+        content: Text(
+          turnOff ? l10n.confirmTurnOff(name) : l10n.confirmTurnOn(name),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l10n.confirm),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _service.setActive(
+        technicianId: technician['id'] as String,
+        active: !turnOff,
+      );
+      _refresh();
+    } on Object {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.technicianOperationFailed)));
+      }
+    }
   }
 
   Future<void> _assign(String technicianId, Map<String, String> fields) async {

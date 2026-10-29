@@ -40,8 +40,12 @@ class AppLocalizations {
   String get errDateNotToday => _text('errDateNotToday');
   String get errFieldDayNotFound => _text('errFieldDayNotFound');
   String get errDevice => _text('errDevice');
-  String endFieldDayConfirmation(int count) =>
-      _text('endFieldDayConfirmation').replaceFirst('{count}', '$count');
+  String endFieldDayConfirm(int count, String time) =>
+      _text('endFieldDayConfirm')
+          .replaceFirst('{count}', '$count')
+          .replaceFirst('{time}', time);
+  String scansNotUploaded(int count) =>
+      _text('scansNotUploaded').replaceFirst('{count}', '$count');
   String get dashboard => _text('dashboard');
   String get settings => _text('settings');
   String get placeholder => _text('placeholder');
@@ -109,6 +113,8 @@ class AppLocalizations {
     'E_FIELD_DAY_NOT_FOUND' => _text('errFieldDayNotFound'),
     'E_FORBIDDEN' => _text('errForbidden'),
     'E_SETTING_INVALID' => _text('errSettingInvalid'),
+    'E_SESSION_NOT_FOUND' => _text('errSessionNotFound'),
+    'E_FIELD_NOT_FOUND' => _text('errFieldNotFound'),
     _ => _text('errAdminAction'),
   };
   String get errDevicePending => _text('errDevicePending');
@@ -135,6 +141,137 @@ class AppLocalizations {
   String clockedOutAt(String name, String time) => _text('clockedOutAt')
       .replaceFirst('{name}', name)
       .replaceFirst('{time}', time);
+  String get notifications => _text('notifications');
+  String get noNotifications => _text('noNotifications');
+  String notifFieldDayNotEnded(int count, String names) =>
+      _text('notifFieldDayNotEnded')
+          .replaceFirst('{count}', '$count')
+          .replaceFirst('{names}', names);
+  String notifFieldDayNotEndedOne(String names) =>
+      _text('notifFieldDayNotEndedOne').replaceFirst('{names}', names);
+  String get notifDeviceApproval => _text('notifDeviceApproval');
+  String get notifGeneric => _text('notifGeneric');
+  String get reminderRepeatMinutes => _text('reminderRepeatMinutes');
+  String minutesValue(int count) =>
+      _text('minutesValue').replaceFirst('{count}', '$count');
+  // Time records
+  String get timeRecords => _text('timeRecords');
+  String get fixTimeRecord => _text('fixTimeRecord');
+  String get enteredByAdmin => _text('enteredByAdmin');
+  String get noTimeRecords => _text('noTimeRecords');
+  String get workerLabel => _text('workerLabel');
+  String get fieldLabel => _text('fieldLabel');
+  String get chooseWorker => _text('chooseWorker');
+  String get previousDay => _text('previousDay');
+  String get nextDay => _text('nextDay');
+  String get chooseDate => _text('chooseDate');
+  String get notClockedOut => _text('notClockedOut');
+  String get timeRecordIncomplete => _text('timeRecordIncomplete');
+  String get openTimeRecords => _text('openTimeRecords');
+  // Paper sheet
+  String get paperSheet => _text('paperSheet');
+  String get paperSheetHint => _text('paperSheetHint');
+  String get printSheet => _text('printSheet');
+  String get sheetTitle => _text('sheetTitle');
+  String get sheetTechnician => _text('sheetTechnician');
+  String get sheetField => _text('sheetField');
+  String get sheetDate => _text('sheetDate');
+  String get sheetNo => _text('sheetNo');
+  String get sheetId => _text('sheetId');
+  String get sheetName => _text('sheetName');
+  String get sheetTimeIn => _text('sheetTimeIn');
+  String get sheetTimeOut => _text('sheetTimeOut');
+  String get sheetExtra => _text('sheetExtra');
+  // Cards
+  String get printAllCards => _text('printAllCards');
+  String get noCardsToPrint => _text('noCardsToPrint');
+  // CSV import
+  String get chooseCsvFile => _text('chooseCsvFile');
+  String get csvHelp => _text('csvHelp');
+  String get csvChecking => _text('csvChecking');
+  String get csvImporting => _text('csvImporting');
+  String get csvNoNameColumn => _text('csvNoNameColumn');
+  String get csvEmpty => _text('csvEmpty');
+  String get csvReadError => _text('csvReadError');
+  String get csvRowsInFile => _text('csvRowsInFile');
+  String get includeDuplicates => _text('includeDuplicates');
+  String get close => _text('close');
+  String importRowLine(int row, String message) => _text('importRowLine')
+      .replaceFirst('{row}', '$row')
+      .replaceFirst('{message}', message);
+  String importDuplicateLine(int row, String workerId) =>
+      _text('importDuplicateLine')
+          .replaceFirst('{row}', '$row')
+          .replaceFirst('{id}', workerId);
+  String importDone(int count) =>
+      _text('importDone').replaceFirst('{count}', '$count');
+  String importMore(int count) =>
+      _text('importMore').replaceFirst('{count}', '$count');
+
+  /// "Row 12: The date of birth is not valid." message for a CSV row code.
+  String csvError(String code) => switch (code) {
+    'E_CSV_NAME_MISSING' => _text('csvNameMissing'),
+    'E_CSV_DOB_INVALID' => _text('csvDobInvalid'),
+    'E_CSV_GENDER_INVALID' => _text('csvGenderInvalid'),
+    'E_CSV_ROW_TOO_LONG' => _text('csvRowTooLong'),
+    _ => _text('errAdminAction'),
+  };
+  // Worker form
+  String get gender => _text('gender');
+  String get male => _text('male');
+  String get female => _text('female');
+  String get otherGender => _text('otherGender');
+  String get notSpecified => _text('notSpecified');
+  String get dateOfBirth => _text('dateOfBirth');
+  String get clearDate => _text('clearDate');
+  // Fields and technicians
+  String get editField => _text('editField');
+  String get turnOffAccount => _text('turnOffAccount');
+  String get turnOnAccount => _text('turnOnAccount');
+  String get accountOff => _text('accountOff');
+  String confirmTurnOff(String name) =>
+      _text('confirmTurnOff').replaceFirst('{name}', name);
+  String confirmTurnOn(String name) =>
+      _text('confirmTurnOn').replaceFirst('{name}', name);
+  // Statistics and flagged list
+  String get statsToday => _text('statsToday');
+  String get statsWeek => _text('statsWeek');
+  String get daily => _text('daily');
+  String get weekly => _text('weekly');
+  String get clockedInNow => _text('clockedInNow');
+  String get finishedWorkers => _text('finishedWorkers');
+  String get techniciansWorking => _text('techniciansWorking');
+  String get fieldsWorking => _text('fieldsWorking');
+  String get fieldDaysNotEnded => _text('fieldDaysNotEnded');
+  String get workersPerDay => _text('workersPerDay');
+  String get hoursPerDay => _text('hoursPerDay');
+  String get attendanceByField => _text('attendanceByField');
+  String get thisWeek => _text('thisWeek');
+  String get lastWeek => _text('lastWeek');
+  String get previousWeek => _text('previousWeek');
+  String get nextWeek => _text('nextWeek');
+  String get workersWeekTotal => _text('workersWeekTotal');
+  String get totalHours => _text('totalHours');
+  String get flaggedFrom => _text('flaggedFrom');
+  String get flaggedTo => _text('flaggedTo');
+  String presentDaysValue(int count) =>
+      _text('presentDaysValue').replaceFirst('{count}', '$count');
+
+  /// Hours and minutes in the current language, for example "5 h 33 min".
+  String durationShort(int minutes) => _text('durationShort')
+      .replaceFirst('{h}', '${minutes ~/ 60}')
+      .replaceFirst('{m}', '${minutes % 60}');
+
+  /// Readable name of a flag kind from `get_flagged_items`.
+  String flagLabel(String kind) => switch (kind) {
+    'outside_hours' => _text('flagOutsideHours'),
+    'clock_skew' => _text('flagClockSkew'),
+    'after_field_end' => _text('flagAfterFieldEnd'),
+    'safety_net_close' => _text('flagSafetyNet'),
+    'no_location' => _text('flagNoLocation'),
+    'burst' => _text('flagBurst'),
+    _ => kind,
+  };
   String get timeNotSet => _text('timeNotSet');
   String get pickTime => _text('pickTime');
   String get retry => _text('retry');
@@ -242,8 +379,9 @@ class AppLocalizations {
       'errFieldDayNotFound': 'No field day was found for this technician.',
       'errDevice':
           'This device cannot sync. Check device approval and try again.',
-      'endFieldDayConfirmation':
-          'End the field day with {count} pending scans?',
+      'endFieldDayConfirm': 'Clock out {count} workers at {time}?',
+      'scansNotUploaded':
+          '{count} scans not uploaded. Connect to the internet.',
       'dashboard': 'Dashboard',
       'settings': 'Settings',
       'placeholder': 'This screen is a scaffold placeholder.',
@@ -328,6 +466,115 @@ class AppLocalizations {
           'Scanning is not ready. Connect to the internet, check that you have a field, then tap sync.',
       'clockedInAt': '{name}: CLOCKED IN {time}',
       'clockedOutAt': '{name}: CLOCKED OUT {time}',
+      'notifications': 'Notifications',
+      'noNotifications': 'No notifications yet.',
+      'notifFieldDayNotEnded':
+          '{count} technicians have not ended their field day: {names}',
+      'notifFieldDayNotEndedOne':
+          '1 technician has not ended their field day: {names}',
+      'notifDeviceApproval': 'A phone is waiting for your approval.',
+      'notifGeneric': 'You have a new notice.',
+      'reminderRepeatMinutes': 'Minutes before the second reminder',
+      'minutesValue': '{count} minutes',
+      // Time records
+      'timeRecords': 'Time records',
+      'fixTimeRecord': 'Fix time record',
+      'enteredByAdmin': 'Entered by admin',
+      'noTimeRecords': 'No time records for this date.',
+      'workerLabel': 'Worker',
+      'fieldLabel': 'Field',
+      'chooseWorker': 'Search worker by name or ID',
+      'previousDay': 'Previous day',
+      'nextDay': 'Next day',
+      'chooseDate': 'Choose date',
+      'notClockedOut': 'Not clocked out',
+      'timeRecordIncomplete': 'Choose a worker, a technician and a field.',
+      'errSessionNotFound': 'This time record was not found. Refresh the list.',
+      'errFieldNotFound': 'This field was not found. Refresh the list.',
+      'openTimeRecords': 'Open time records',
+      // Paper sheet
+      'paperSheet': 'Daily paper sheet',
+      'paperSheetHint':
+          'Print a sheet for one technician and one date. Keep a few copies in case the phone fails.',
+      'printSheet': 'Print sheet',
+      'sheetTitle': 'Daily attendance sheet',
+      'sheetTechnician': 'Technician',
+      'sheetField': 'Field',
+      'sheetDate': 'Date',
+      'sheetNo': 'No.',
+      'sheetId': 'ID',
+      'sheetName': 'Name',
+      'sheetTimeIn': 'Time in',
+      'sheetTimeOut': 'Time out',
+      'sheetExtra': 'Extra workers: write the ID number.',
+      // Cards
+      'printAllCards': 'Print all cards',
+      'noCardsToPrint': 'There are no active workers to print.',
+      // CSV import
+      'chooseCsvFile': 'Choose CSV file',
+      'csvHelp':
+          'The first row must be the column names: name, cp_no, address, gender, date_of_birth.',
+      'csvChecking': 'Checking the file...',
+      'csvImporting': 'Adding workers...',
+      'csvNoNameColumn': 'The file needs a "name" column in the first row.',
+      'csvEmpty': 'The file has no workers.',
+      'csvReadError': 'The file could not be read. Choose a CSV file.',
+      'csvRowsInFile': 'Rows in file',
+      'importRowLine': 'Row {row}: {message}',
+      'importDuplicateLine': 'Row {row}: possible duplicate of {id}',
+      'csvNameMissing': 'The name is missing.',
+      'csvDobInvalid': 'The date of birth is not valid.',
+      'csvGenderInvalid': 'The gender must be male, female, or other.',
+      'csvRowTooLong': 'A value in this row is too long.',
+      'includeDuplicates': 'Also add the possible duplicates',
+      'importDone': 'Added {count} workers.',
+      'importMore': '+{count} more',
+      'close': 'Close',
+      // Worker form
+      'gender': 'Gender',
+      'male': 'Male',
+      'female': 'Female',
+      'otherGender': 'Other',
+      'notSpecified': 'Not specified',
+      'dateOfBirth': 'Date of birth',
+      'clearDate': 'Clear date',
+      // Fields and technicians
+      'editField': 'Edit field',
+      'turnOffAccount': 'Turn off account',
+      'turnOnAccount': 'Turn on account',
+      'accountOff': 'Account off',
+      'confirmTurnOff':
+          "Turn off {name}'s account? They will not be able to scan until you turn it on again.",
+      'confirmTurnOn': "Turn on {name}'s account?",
+      // Statistics and flagged list
+      'statsToday': 'Today',
+      'statsWeek': 'Week',
+      'daily': 'Daily',
+      'weekly': 'Weekly',
+      'clockedInNow': 'Clocked in now',
+      'finishedWorkers': 'Finished',
+      'techniciansWorking': 'Technicians working',
+      'fieldsWorking': 'Fields working',
+      'fieldDaysNotEnded': 'Field days not ended',
+      'workersPerDay': 'Workers per day',
+      'hoursPerDay': 'Hours per day',
+      'attendanceByField': 'Attendance by field',
+      'thisWeek': 'This week',
+      'lastWeek': 'Last week',
+      'previousWeek': 'Previous week',
+      'nextWeek': 'Next week',
+      'presentDaysValue': '{count} days present',
+      'workersWeekTotal': 'Workers present (all days)',
+      'totalHours': 'Total hours',
+      'durationShort': '{h} h {m} min',
+      'flagOutsideHours': 'Outside scan hours',
+      'flagClockSkew': 'Phone clock is wrong',
+      'flagAfterFieldEnd': 'Scan after the field day ended',
+      'flagSafetyNet': "Closed another technician's time",
+      'flagNoLocation': 'No location saved',
+      'flagBurst': 'Many scans at once',
+      'flaggedFrom': 'From',
+      'flaggedTo': 'To',
       'timeNotSet': 'Not set',
       'pickTime': 'Choose time',
       'retry': 'Try again',
@@ -438,8 +685,9 @@ class AppLocalizations {
       'errFieldDayNotFound': 'Walang field day para sa technician na ito.',
       'errDevice':
           'Hindi makapag-sync ang device. Suriin ang approval at subukan muli.',
-      'endFieldDayConfirmation':
-          'Tapusin ang araw sa field na may {count} scan na naghihintay?',
+      'endFieldDayConfirm': 'I-clock out ang {count} manggagawa sa {time}?',
+      'scansNotUploaded':
+          '{count} scan ang hindi pa na-upload. Kumonekta sa internet.',
       'dashboard': 'Dashboard',
       'settings': 'Settings',
       'placeholder': 'Placeholder lamang ang screen na ito.',
@@ -528,6 +776,117 @@ class AppLocalizations {
           'Hindi pa handa ang pag-scan. Kumonekta sa internet, tiyaking may field ka, saka pindutin ang sync.',
       'clockedInAt': '{name}: NAKA-CLOCK IN {time}',
       'clockedOutAt': '{name}: NAKA-CLOCK OUT {time}',
+      'notifications': 'Mga abiso',
+      'noNotifications': 'Wala pang abiso.',
+      'notifFieldDayNotEnded':
+          '{count} technician ang hindi pa nagtatapos ng field day: {names}',
+      'notifFieldDayNotEndedOne':
+          '1 technician ang hindi pa nagtatapos ng field day: {names}',
+      'notifDeviceApproval':
+          'May teleponong naghihintay ng iyong pag-apruba.',
+      'notifGeneric': 'May bago kang abiso.',
+      'reminderRepeatMinutes': 'Minuto bago ang ikalawang paalala',
+      'minutesValue': '{count} minuto',
+      // Time records
+      'timeRecords': 'Mga talaan ng oras',
+      'fixTimeRecord': 'Ayusin ang talaan ng oras',
+      'enteredByAdmin': 'Inilagay ng admin',
+      'noTimeRecords': 'Walang talaan ng oras sa petsang ito.',
+      'workerLabel': 'Manggagawa',
+      'fieldLabel': 'Field',
+      'chooseWorker': 'Hanapin ang manggagawa sa pangalan o ID',
+      'previousDay': 'Nakaraang araw',
+      'nextDay': 'Susunod na araw',
+      'chooseDate': 'Pumili ng petsa',
+      'notClockedOut': 'Hindi pa naka-clock out',
+      'timeRecordIncomplete': 'Pumili ng manggagawa, technician at field.',
+      'errSessionNotFound':
+          'Hindi nakita ang talaan ng oras na ito. I-refresh ang listahan.',
+      'errFieldNotFound': 'Hindi nakita ang field na ito. I-refresh ang listahan.',
+      'openTimeRecords': 'Buksan ang mga talaan ng oras',
+      // Paper sheet
+      'paperSheet': 'Papel na sheet para sa araw',
+      'paperSheetHint':
+          'Mag-print ng sheet para sa isang technician at isang petsa. Magtabi ng ilang kopya kung masira ang telepono.',
+      'printSheet': 'I-print ang sheet',
+      'sheetTitle': 'Sheet ng pagpasok sa araw',
+      'sheetTechnician': 'Technician',
+      'sheetField': 'Field',
+      'sheetDate': 'Petsa',
+      'sheetNo': 'Blg.',
+      'sheetId': 'ID',
+      'sheetName': 'Pangalan',
+      'sheetTimeIn': 'Oras ng pasok',
+      'sheetTimeOut': 'Oras ng labas',
+      'sheetExtra': 'Mga dagdag na manggagawa: isulat ang ID number.',
+      // Cards
+      'printAllCards': 'I-print ang lahat ng card',
+      'noCardsToPrint': 'Walang aktibong manggagawa na ipi-print.',
+      // CSV import
+      'chooseCsvFile': 'Pumili ng CSV file',
+      'csvHelp':
+          'Dapat pangalan ng mga column ang unang hilera: name, cp_no, address, gender, date_of_birth.',
+      'csvChecking': 'Sinusuri ang file...',
+      'csvImporting': 'Idinadagdag ang mga manggagawa...',
+      'csvNoNameColumn': 'Kailangan ng column na "name" sa unang hilera ng file.',
+      'csvEmpty': 'Walang manggagawa sa file.',
+      'csvReadError': 'Hindi mabasa ang file. Pumili ng CSV file.',
+      'csvRowsInFile': 'Mga hilera sa file',
+      'importRowLine': 'Hilera {row}: {message}',
+      'importDuplicateLine': 'Hilera {row}: posibleng kapareho ni {id}',
+      'csvNameMissing': 'Walang pangalan.',
+      'csvDobInvalid': 'Hindi wasto ang petsa ng kapanganakan.',
+      'csvGenderInvalid': 'Dapat male, female, o other ang gender.',
+      'csvRowTooLong': 'Masyadong mahaba ang isang halaga sa hilerang ito.',
+      'includeDuplicates': 'Idagdag din ang mga posibleng doble',
+      'importDone': 'Naidagdag ang {count} manggagawa.',
+      'importMore': '+{count} pa',
+      'close': 'Isara',
+      // Worker form
+      'gender': 'Kasarian',
+      'male': 'Lalaki',
+      'female': 'Babae',
+      'otherGender': 'Iba pa',
+      'notSpecified': 'Hindi tinukoy',
+      'dateOfBirth': 'Petsa ng kapanganakan',
+      'clearDate': 'Alisin ang petsa',
+      // Fields and technicians
+      'editField': 'I-edit ang field',
+      'turnOffAccount': 'I-off ang account',
+      'turnOnAccount': 'I-on ang account',
+      'accountOff': 'Naka-off ang account',
+      'confirmTurnOff':
+          'I-off ang account ni {name}? Hindi siya makakapag-scan hangga\'t hindi mo ito ibinabalik.',
+      'confirmTurnOn': 'I-on ang account ni {name}?',
+      // Statistics and flagged list
+      'statsToday': 'Ngayon',
+      'statsWeek': 'Linggo',
+      'daily': 'Araw-araw',
+      'weekly': 'Lingguhan',
+      'clockedInNow': 'Naka-clock in ngayon',
+      'finishedWorkers': 'Tapos na',
+      'techniciansWorking': 'Technician na nagtatrabaho',
+      'fieldsWorking': 'Field na may trabaho',
+      'fieldDaysNotEnded': 'Field day na hindi pa natatapos',
+      'workersPerDay': 'Manggagawa bawat araw',
+      'hoursPerDay': 'Oras bawat araw',
+      'attendanceByField': 'Pagpasok bawat field',
+      'thisWeek': 'Ngayong linggo',
+      'lastWeek': 'Nakaraang linggo',
+      'previousWeek': 'Nakaraang linggo',
+      'nextWeek': 'Susunod na linggo',
+      'presentDaysValue': '{count} araw na pumasok',
+      'workersWeekTotal': 'Manggagawang pumasok (lahat ng araw)',
+      'totalHours': 'Kabuuang oras',
+      'durationShort': '{h} oras {m} min',
+      'flagOutsideHours': 'Labas sa oras ng pag-scan',
+      'flagClockSkew': 'Mali ang orasan ng telepono',
+      'flagAfterFieldEnd': 'Scan matapos ang field day',
+      'flagSafetyNet': 'Isinara ang oras ng ibang technician',
+      'flagNoLocation': 'Walang nai-save na lokasyon',
+      'flagBurst': 'Sabay-sabay na maraming scan',
+      'flaggedFrom': 'Mula',
+      'flaggedTo': 'Hanggang',
       'timeNotSet': 'Hindi pa naitakda',
       'pickTime': 'Pumili ng oras',
       'retry': 'Subukan muli',

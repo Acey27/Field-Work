@@ -71,8 +71,19 @@ class ScanRepository {
       return ScanResult(ScanOutcome.inactive, worker: worker);
     }
     final dayStart = phTimeToUtc(phDateOf(now), 0, 0);
+    final allToday = await database.workerScanTimes(worker.id, dayStart);
+    // After End field day everyone is clocked out, so the next scan is a
+    // clock in again, whatever happened before.
+    final resetAt = await database.latestEndFieldDay(
+      context.technicianId,
+      dayStart,
+    );
+    final sinceReset = resetAt == null
+        ? allToday
+        : allToday.where((time) => time.isAfter(resetAt)).toList();
     final decision = decideScan(
-      todaysScans: await database.workerScanTimes(worker.id, dayStart),
+      todaysScans: sinceReset,
+      recentScans: allToday,
       now: now,
     );
     if (decision.isRepeat) {

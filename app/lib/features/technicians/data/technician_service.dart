@@ -44,16 +44,23 @@ class TechnicianService {
     required String technicianId,
     required String fieldId,
   }) async {
-    await _client
-        .from('field_assignments')
-        .update({'unassigned_at': DateTime.now().toUtc().toIso8601String()})
-        .eq('technician_id', technicianId)
-        .isFilter('unassigned_at', null);
-    await _client.from('field_assignments').insert({
-      'technician_id': technicianId,
-      'field_id': fieldId,
-      'assigned_by': _client.auth.currentUser!.id,
-    });
+    // One database step: the old assignment is closed and the new one opened
+    // together, so a technician never ends up with two fields or none.
+    await _client.rpc<Map<String, dynamic>>(
+      'admin_assign_field',
+      params: {'p_technician_id': technicianId, 'p_field_id': fieldId},
+    );
+  }
+
+  Future<void> setActive({
+    required String technicianId,
+    required bool active,
+  }) async {
+    _requireConfigured();
+    await _client.rpc<Map<String, dynamic>>(
+      'admin_set_technician_active',
+      params: {'p_technician_id': technicianId, 'p_active': active},
+    );
   }
 
   Future<void> setDeviceStatus(String deviceId, String action) async {

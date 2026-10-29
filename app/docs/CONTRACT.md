@@ -444,14 +444,17 @@ All of these require a `p_reason` of at least 3 characters (`E_REASON_REQUIRED`)
 | `suggest_end_time(p_technician_id uuid, p_work_date date)` | | `{ "time": "<utc>" or null }`, the technician's last scan of that date |
 | `admin_end_field_day(p_technician_id uuid, p_work_date date, p_ended_at timestamptz, p_reason text)` | Time is always required (the app fills in the suggestion for today) | Same shape as 4.7. Sessions closed with `closed_by = 'admin'`, field day `end_method = 'admin'` |
 | `admin_add_time_record(p_worker_id text, p_field_id uuid, p_technician_id uuid, p_work_date date, p_time_in timestamptz, p_time_out timestamptz, p_reason text)` | | `{ "session_id": uuid }`. Creates the field day if missing. `entered_by_admin = true` |
-| `admin_fix_time_record(p_session_id uuid, p_time_in timestamptz, p_time_out timestamptz, p_reason text)` | | `{ "session_id": uuid }` |
+| `admin_fix_time_record(p_session_id uuid, p_time_in timestamptz, p_time_out timestamptz, p_reason text)` | | `{ "session_id": uuid }`. The times must stay on the record's own date. Marks the record `entered_by_admin` |
+| `get_sessions_for_date(p_date date default null)` **[P]** | `p_date` defaults to `ph_today()` | One row per session of that date for the admin day list: `session_id, worker_id, worker_name, technician_id, technician_code, technician_name, field_id, field_name, work_date, time_in, time_out, closed_by, entered_by_admin, manual_reason` |
 
-Checks: `E_TIME_OUT_BEFORE_IN`, `E_TIME_IN_FUTURE`, `E_OVERLAP` (the worker already has a session overlapping that time), `E_DATE_MISMATCH` (time out on a different Philippine date).
+Checks: `E_TIME_OUT_BEFORE_IN`, `E_TIME_IN_FUTURE`, `E_OVERLAP` (the worker already has a session overlapping that time; two records that only touch, such as 08:00 to 09:00 and 09:00 to 10:00, are allowed), `E_DATE_MISMATCH` (time out on a different Philippine date), `E_SESSION_NOT_FOUND` (unknown worker or record).
 
 ### 4.9 `get_today_field_days(p_date date default null)` (admin)
 
 `p_date` defaults to `ph_today()`. Returns one row per field day:
-`technician_id, technician_code, technician_name, field_id, field_name, status, ended_at, clocked_in_count, worked_count, last_sync_at`.
+`field_day_id, work_date, technician_id, technician_code, technician_name, field_id, field_name, status, ended_at, clocked_in_count, worked_count, last_sync_at`.
+`field_day_id` and `work_date` are returned so the app can call `admin_end_field_day` for the right technician and date.
+`last_sync_at` is the latest `devices.last_sync_at` of that technician.
 
 `status` is one of `working`, `ended`, `not_ended`, and it is **computed**:
 `not_ended` when the stored status is `working` and (`work_date < ph_today()` or the Philippine time is at or after `reminder_time`). Technicians with no field day on that date are not listed **[P]**.
@@ -488,7 +491,13 @@ The technician "looks up a worker's time record for the current week". The week 
 | `get_stats_week(p_week_start date)` | Per date: `workers_present`, `total_minutes`. Per field: `attendance_by_field` (field, present_days, total_minutes). Same two totals for the previous week for the comparison |
 | `get_flagged_items(p_from date, p_to date)` | Rows `{ kind, scan_id, technician, worker, at, detail }` where `kind` is `outside_hours`, `clock_skew`, `after_field_end`, `safety_net_close`, `no_location`, or `burst`. `burst` = more than `burst_scan_count` scans from one device within `burst_window_seconds` |
 
-Statistics read from `attendance_sessions`, not from `scans`.
+Statistics read from `attendance_sessions`, not from `scans`. An open session adds 0 minutes.
+
+How the numbers are worked out (migration 017):
+
+- `get_stats_today`: `clocked_in_now` = workers with an open session today. `finished` = workers with a closed session today and none open. `technicians_working` and `fields_working` = field days of today whose stored status is `working` (this includes the ones that are already "Not ended"). `field_days_not_ended` = stored `working` and (earlier date, or today and the Philippine time is at or after `reminder_time`), the same rule as 4.9.
+- `get_stats_week`: returns `{ week_start, days: [7 x { date, workers_present, total_minutes }], attendance_by_field: [{ field_id, field_name, present_days, total_minutes }], totals: { workers_present, total_minutes }, previous: { workers_present, total_minutes } }`. `workers_present` of a week is the sum of the daily counts (worker-days). `E_WEEK_NOT_MONDAY` if the date is not a Monday.
+- `get_flagged_items`: `p_from` and `p_to` default to today. Each row also has `technician_code`, `worker_id`, and `detail = { field_name, result, lat, lng }`. `burst` rows are scans that have more than `burst_scan_count` scans from the same phone inside the previous `burst_window_seconds` (the index `scans_device_scanned_idx` supports this).
 
 ### 4.13 Weekly masterlist (admin)
 
@@ -534,12 +543,36 @@ Output:
 - Row error codes: `E_CSV_NAME_MISSING`, `E_CSV_DOB_INVALID`, `E_CSV_GENDER_INVALID`, `E_CSV_ROW_TOO_LONG`. The app turns them into "Row 12: date of birth is not valid".
 - One audit entry per commit with the counts in `meta`.
 
+Fields and technician accounts (migration 016). The app uses these instead of direct table writes:
+
+| Function | Purpose |
+| --- | --- |
+| `admin_update_field(p_field_id uuid, p_name text, p_location text, p_address text)` | Edit a field. `E_FIELD_NAME_MISSING`, `E_FIELD_NOT_FOUND`. Audit entry |
+| `admin_assign_field(p_technician_id uuid, p_field_id uuid)` | Closes the technician's current assignment and opens the new one in one step (2.4). Returns `{ assignment_id, changed }`; `changed` is false when the technician already has that field. `E_FIELD_NOT_FOUND`. Audit entry |
+| `admin_set_technician_active(p_technician_id uuid, p_active bool)` | Turns a technician account off or on. Off also sets the approved phone to `revoked`. A profile with `active = false` can call nothing (Section 7). Audit events `account_disabled` / `account_enabled` |
+
+`admin_set_technician_active` only changes the profile. Section 5 also describes an Edge Function `set_account_active` that bans the Supabase Auth user; that function is not built yet, so a turned-off technician can still sign in but every call is refused.
+
 ### 4.15 Settings and notifications
 
 | Function | Who | Purpose |
 | --- | --- | --- |
 | `set_setting(p_key text, p_value jsonb)` | admin or super admin, depending on the key (Section 14) | Validates the type and range. `E_SETTING_UNKNOWN`, `E_SETTING_INVALID`, `E_FORBIDDEN`. Audit entry with before and after |
 | `mark_notification_read(p_id uuid)` | recipient | Sets `read_at` |
+| `get_my_notifications(p_limit int default 50)` | any signed-in user | The caller's own notifications, newest first: `id, type, params, target, read_at, created_at` (added with migration 015, so the app never reads other people's rows) |
+
+### 4.16 Paper sheet data (admin) **[P]**
+
+`get_paper_sheet(p_technician_id uuid, p_date date default null)` returns the data for the printable daily sheet (SPEC section 8):
+
+```json
+{ "technician": { "id": "uuid", "code": "T-00001", "name": "John Doe" },
+  "field": { "id": "uuid", "name": "Field 1", "location": "…" },
+  "work_date": "2026-10-29",
+  "workers": [ { "id": "W-00001", "name": "Zeann" } ] }
+```
+
+`workers` are the active workers that technician scanned (clocked in or out) in the 14 days up to `p_date` (Section 17, item 3). `field` is the current assignment, or the field of the last field day, or null. `E_FIELD_DAY_NOT_FOUND` if the technician does not exist. The app draws the PDF in the current language, with at least 25 rows and at least 8 blank rows.
 
 ---
 
@@ -844,7 +877,10 @@ Value types are fixed. Times are `"HH:MM"` in Philippine time.
 | `012_field_days_admin.sql` | B | `get_today_field_days`, `suggest_end_time`, `admin_end_field_day` (sections 4.8, 4.9) |
 | `013_settings_validation.sql` | B | `admin_set_setting` validates `HH:MM` and boolean values (`E_SETTING_INVALID`) |
 | `014_settings_admin_scan_hours.sql` | B | Admins may change scan hours (section 14) |
-| `0NN_jobs_retention.sql` (planned) | B | Section 9 jobs. Next free number after the migrations above |
+| `015_reminders_notifications.sql` | B | `job_field_day_reminders` (pg_cron, every 5 minutes), `get_my_notifications`, `mark_notification_read`, settings `reminder_repeat_minutes`, `technician_reminder_enabled`, `burst_scan_count`, `burst_window_seconds` |
+| `016_admin_records_sheet_assign.sql` | B | `admin_add_time_record` with `E_OVERLAP`, `admin_fix_time_record`, `get_sessions_for_date`, `get_paper_sheet`, `admin_update_field`, `admin_assign_field`, `admin_set_technician_active` (replaces the draft `admin_correct_session`) |
+| `017_stats_flagged.sql` | B | `get_stats_today`, `get_stats_week`, `get_flagged_items` and the `scans_device_scanned_idx` index (replace the drafts `admin_statistics` and `admin_flagged_scans`) |
+| `0NN_jobs_retention.sql` (planned) | B | Retention jobs, Section 9. Next free number after the migrations above |
 
 App side (A): everything in Section 6 and 8, the scanner, End field day, and the technician screens. Both of you: this file, `core/l10n`, `core/router`, `core/theme`.
 
@@ -876,6 +912,8 @@ Each item has a recommended answer. Tick one when agreed.
 | 2026-10-27 | 0.1 | draft | First draft from the spec and the build guide |
 | 2026-10-28 | 0.1 | project note | Phase 3 integration verification is pending: technician account provisioning, field/worker test data, offline-to-Supabase sync, retry idempotency, role checks, and end-field-day behavior must be tested through the UI against the development project. Phase 4 may proceed, but Phase 3 is not signed off until these tests pass. |
 | 2026-10-29 | 0.1 | project note | Section 4.9: `get_today_field_days` also returns `field_day_id` and `work_date`. Migrations 012 to 014 added (section 16). Section 14: admins (not only the super admin) change `scan_hours_start` and `scan_hours_end`, a company decision; SPEC section 2 updated in the same change. The technician app now calls `register_device` before `get_my_context` (sections 4.2, 4.4). |
+| 2026-10-29 | 0.1 | project note | Phase 4 completion (migrations 016, 017): sections 4.8 (`get_sessions_for_date`, overlap rule), 4.12 (how the statistics are worked out), 4.14 (field edit, one-step assignment, technician on/off) and new 4.16 (`get_paper_sheet`). The statistics and flagged functions now use the contract names; the drafts `admin_statistics`, `admin_flagged_scans` and `admin_correct_session` were dropped. The app now has a CSV file picker, chunks of 500, row-level messages and the duplicate confirmation. The Edge Function `set_account_active` (section 5) is still not built. |
+| 2026-10-29 | 0.1 | project note | Migration 015: reminder job, `get_my_notifications` (section 4.15), reminder settings seeded (section 14). `device_approval_needed` currently carries `{ technician_id, device_id }` only; the app shows a generic message for it. |
 
 ---
 

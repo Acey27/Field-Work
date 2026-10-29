@@ -1,6 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/supabase/supabase_client.dart';
+import '../../../core/utils/ph_time.dart';
+import '../domain/admin_stats.dart';
 
 class AdminService {
   SupabaseClient get _client => Supabase.instance.client;
@@ -25,16 +27,32 @@ class AdminService {
     return time == null ? null : DateTime.parse(time).toUtc();
   }
 
-  Future<Map<String, dynamic>> statistics() async {
+  Future<TodayStats> statsToday() async {
     _requireConfigured();
-    final value = await _client.rpc<Map<String, dynamic>>('admin_statistics');
-    return value;
+    final value = await _client.rpc<Map<String, dynamic>>('get_stats_today');
+    return TodayStats.fromJson(value);
   }
 
-  Future<List<Map<String, dynamic>>> flaggedScans() async {
+  /// [weekStart] must be a Monday (Philippine date).
+  Future<WeekStats> statsWeek(DateTime weekStart) async {
     _requireConfigured();
-    final value = await _client.rpc<List<dynamic>>('admin_flagged_scans');
-    return _rows(value);
+    final value = await _client.rpc<Map<String, dynamic>>(
+      'get_stats_week',
+      params: {'p_week_start': formatPhDate(weekStart)},
+    );
+    return WeekStats.fromJson(value);
+  }
+
+  Future<List<FlaggedItem>> flaggedItems(DateTime from, DateTime to) async {
+    _requireConfigured();
+    final value = await _client.rpc<List<dynamic>>(
+      'get_flagged_items',
+      params: {'p_from': formatPhDate(from), 'p_to': formatPhDate(to)},
+    );
+    return value
+        .whereType<Map<String, dynamic>>()
+        .map(FlaggedItem.fromJson)
+        .toList();
   }
 
   Future<Map<String, dynamic>> endFieldDay({

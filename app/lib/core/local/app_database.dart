@@ -88,6 +88,51 @@ class AppDatabase extends _$AppDatabase {
     return rows.map((row) => row.scannedAt.toUtc()).toList();
   }
 
+  /// When this technician last ended the field day on the phone since
+  /// [fromUtc], or null. Everyone was clocked out at that moment.
+  Future<DateTime?> latestEndFieldDay(
+    String technicianId,
+    DateTime fromUtc,
+  ) async {
+    final rows =
+        await (select(localEvents)
+              ..where(
+                (row) =>
+                    row.technicianId.equals(technicianId) &
+                    row.endedAt.isBiggerOrEqualValue(fromUtc),
+              )
+              ..orderBy([
+                (row) => OrderingTerm(
+                  expression: row.endedAt,
+                  mode: OrderingMode.desc,
+                ),
+              ])
+              ..limit(1))
+            .get();
+    return rows.isEmpty ? null : rows.first.endedAt.toUtc();
+  }
+
+  /// Workers this phone has clocked in and not out since [fromUtc] (the start
+  /// of the Philippine day), counting only scans after the last End field day.
+  /// An odd number of scans means the worker is still clocked in.
+  Future<int> clockedInCount(String technicianId, DateTime fromUtc) async {
+    final cutoff = await latestEndFieldDay(technicianId, fromUtc);
+    final rows =
+        await (select(localScans)..where(
+              (row) =>
+                  row.technicianId.equals(technicianId) &
+                  row.scannedAt.isBiggerOrEqualValue(fromUtc) &
+                  row.uploadState.equals('rejected').not(),
+            ))
+            .get();
+    final perWorker = <String, int>{};
+    for (final row in rows) {
+      if (cutoff != null && !row.scannedAt.toUtc().isAfter(cutoff)) continue;
+      perWorker.update(row.workerId, (count) => count + 1, ifAbsent: () => 1);
+    }
+    return perWorker.values.where((count) => count.isOdd).length;
+  }
+
   Future<int> pendingCount() async {
     final scans = await (select(
       localScans,

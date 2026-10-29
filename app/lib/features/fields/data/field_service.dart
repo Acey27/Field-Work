@@ -27,6 +27,24 @@ class FieldService {
     return value;
   }
 
+  Future<void> updateField({
+    required String fieldId,
+    required String name,
+    String? location,
+    String? address,
+  }) async {
+    _requireConfigured();
+    await _client.rpc<Map<String, dynamic>>(
+      'admin_update_field',
+      params: {
+        'p_field_id': fieldId,
+        'p_name': name,
+        'p_location': location,
+        'p_address': address,
+      },
+    );
+  }
+
   Future<void> setActive({
     required String fieldId,
     required bool active,

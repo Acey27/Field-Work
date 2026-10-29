@@ -16,6 +16,7 @@ import '../data/scan_repository.dart';
 import '../data/sync_service.dart';
 import '../domain/scan_decision.dart';
 import '../domain/scan_readiness.dart';
+import '../domain/sync_schedule.dart';
 import 'scan_feedback.dart';
 
 class ScannerPage extends StatefulWidget {
@@ -39,6 +40,9 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
   late final SyncService _syncService;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   Timer? _feedbackTimer;
+  Timer? _retryTimer;
+  final _throttle = SyncThrottle();
+  int _syncFailures = 0;
   ScanContext? _scanContext;
   ScanReadiness _readiness = ScanReadiness.loading;
   bool _contextRequested = false;
@@ -75,6 +79,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _feedbackTimer?.cancel();
+    _retryTimer?.cancel();
     _connectivitySubscription?.cancel();
     _scannerController.dispose();
     _database.close();
@@ -181,31 +186,84 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
   }
 
   /// The sync button: load the field first if the app does not have it yet.
-  Future<void> _syncOrLoad() => _scanContext == null ? _loadContext() : _sync();
+  /// A tap on the button always syncs now; automatic calls are spaced out.
+  Future<void> _syncOrLoad({bool force = false}) =>
+      _scanContext == null ? _loadContext() : _sync(force: force);
 
-  Future<void> _sync() async {
+  void _scheduleSync(Duration delay) {
+    _retryTimer?.cancel();
+    _retryTimer = Timer(delay, () {
+      if (mounted) _sync();
+    });
+  }
+
+  /// Workers still clocked in on this phone today, after the last End field
+  /// day. Used offline and while scans are waiting to upload.
+  Future<void> _refreshClockedIn() async {
+    final scanContext = _scanContext;
+    if (scanContext == null) return;
+    final dayStart = phTimeToUtc(phDateOf(DateTime.now()), 0, 0);
+    final count = await _database.clockedInCount(
+      scanContext.technicianId,
+      dayStart,
+    );
+    if (mounted) setState(() => _clockedInCount = count);
+  }
+
+  /// Uploads waiting scans (CONTRACT.md section 8). Automatic runs are at
+  /// least [minSyncInterval] apart, and a failed run is retried after
+  /// 30 s, 1 min, 2 min, then every 5 min while something is waiting.
+  Future<void> _sync({bool force = false}) async {
     if (_syncing || _scanContext == null) return;
+    if (!force) {
+      final wait = _throttle.remaining(DateTime.now());
+      if (wait > Duration.zero) {
+        _scheduleSync(wait);
+        return;
+      }
+    }
+    _retryTimer?.cancel();
     _syncing = true;
+    _throttle.markStarted(DateTime.now());
     if (mounted) setState(() => _status = 'syncing');
     try {
       await _syncService.sync();
-      try {
-        _clockedInCount = await _syncService.fetchClockedInCount();
-      } catch (_) {
-        // A successful scan sync is still useful if the field-day read is unavailable.
-      }
+      _syncFailures = 0;
       await _refreshPendingCount();
+      if (_pendingCount == 0) {
+        try {
+          final serverCount = await _syncService.fetchClockedInCount();
+          if (mounted) setState(() => _clockedInCount = serverCount);
+        } catch (_) {
+          await _refreshClockedIn();
+        }
+      } else {
+        await _refreshClockedIn();
+      }
       if (mounted) setState(() => _status = 'online');
     } on PostgrestException catch (error) {
-      if (mounted) {
-        setState(() => _status = 'offline');
-        _showMessage(error.code ?? error.message);
+      if (!mounted) return;
+      setState(() => _status = 'offline');
+      if (isBatchLevelError(error.message)) {
+        // Stop the loop and tell the technician why (CONTRACT.md section 8).
+        _syncFailures = 0;
+        setState(() => _readiness = readinessFromCode(error.message));
+      } else {
+        await _scheduleRetry();
       }
     } catch (_) {
-      if (mounted) setState(() => _status = 'offline');
+      if (!mounted) return;
+      setState(() => _status = 'offline');
+      await _scheduleRetry();
     } finally {
       _syncing = false;
     }
+  }
+
+  Future<void> _scheduleRetry() async {
+    _syncFailures++;
+    await _refreshPendingCount();
+    if (_pendingCount > 0) _scheduleSync(retryDelay(_syncFailures));
   }
 
   Future<Position?> _position() async {
@@ -278,6 +336,9 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       _setFeedback(_feedbackFor(result, AppLocalizations.of(context)));
       if (result.outcome == ScanOutcome.saved) {
         await _refreshPendingCount();
+        await _refreshClockedIn();
+        // Upload soon, but not more than once every 30 seconds.
+        if (_status != 'offline') unawaited(_sync());
       } else if (result.outcome == ScanOutcome.badCard) {
         // The worker list may be out of date after a reissued card.
         unawaited(_sync());
@@ -319,17 +380,41 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
     };
   }
 
+  /// "Clock out 5 workers at 4:52 PM?" with a warning, that does not block,
+  /// when scans are still waiting to upload (SPEC.md section 7).
   Future<void> _endFieldDay() async {
-    final count = _status == 'online'
-        ? _clockedInCount
-        : await _database.pendingScanCount();
+    await _refreshClockedIn();
+    final waiting = await _database.pendingScanCount();
     if (!mounted) return;
     final l10n = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    final count = _clockedInCount;
+    final time = formatPhTime(DateTime.now().toUtc());
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(l10n.endFieldDay),
-        content: Text(l10n.endFieldDayConfirmation(count)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (waiting > 0)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                color: colors.secondary,
+                child: Row(
+                  children: [
+                    const Icon(Icons.cloud_off),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(l10n.scansNotUploaded(waiting))),
+                  ],
+                ),
+              ),
+            Text(l10n.endFieldDayConfirm(count, time)),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -348,14 +433,8 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       endedAt: DateTime.now().toUtc(),
     );
     await _refreshPendingCount();
-    await _sync();
-  }
-
-  void _showMessage(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    await _refreshClockedIn();
+    await _sync(force: true);
   }
 
   @override
@@ -392,7 +471,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
             title: Text(status),
             trailing: IconButton(
               tooltip: l10n.syncing,
-              onPressed: _syncOrLoad,
+              onPressed: () => _syncOrLoad(force: true),
               icon: const Icon(Icons.sync),
             ),
           ),

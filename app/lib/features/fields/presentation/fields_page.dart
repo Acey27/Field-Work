@@ -89,6 +89,7 @@ class _FieldsPageState extends State<FieldsPage> {
                           return _FieldTile(
                             row: row,
                             onToggle: () => _toggle(row),
+                            onEdit: () => _showCreate(row),
                           );
                         },
                       ),
@@ -100,15 +101,19 @@ class _FieldsPageState extends State<FieldsPage> {
     );
   }
 
-  Future<void> _showCreate() async {
+  Future<void> _showCreate([Map<String, dynamic>? existing]) async {
     final l10n = AppLocalizations.of(context);
-    final name = TextEditingController();
-    final location = TextEditingController();
-    final address = TextEditingController();
+    final name = TextEditingController(text: existing?['name'] as String?);
+    final location = TextEditingController(
+      text: existing?['location'] as String?,
+    );
+    final address = TextEditingController(
+      text: existing?['address'] as String?,
+    );
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(l10n.addField),
+        title: Text(existing == null ? l10n.addField : l10n.editField),
         content: SingleChildScrollView(
           child: Column(
             children: [
@@ -136,11 +141,20 @@ class _FieldsPageState extends State<FieldsPage> {
             onPressed: () async {
               if (name.text.trim().isEmpty) return;
               try {
-                await _service.createField(
-                  name: name.text,
-                  location: location.text,
-                  address: address.text,
-                );
+                if (existing == null) {
+                  await _service.createField(
+                    name: name.text,
+                    location: location.text,
+                    address: address.text,
+                  );
+                } else {
+                  await _service.updateField(
+                    fieldId: existing['id'] as String,
+                    name: name.text,
+                    location: location.text,
+                    address: address.text,
+                  );
+                }
                 if (context.mounted) Navigator.pop(context, true);
               } on Object catch (error) {
                 if (context.mounted) _showOperationError(error);
@@ -176,9 +190,15 @@ class _FieldsPageState extends State<FieldsPage> {
 
   void _showOperationError(Object error) {
     final l10n = AppLocalizations.of(context);
-    final code = error is AuthException ? error.message : '';
+    final code = switch (error) {
+      AuthException(:final message) => message,
+      PostgrestException(:final message) => message,
+      _ => '',
+    };
     final message = code == 'E_SERVER_CONFIG'
         ? l10n.authError(code)
+        : code == 'E_FIELD_NOT_FOUND' || code == 'E_FORBIDDEN'
+        ? l10n.adminError(code)
         : l10n.fieldOperationFailed;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
@@ -186,10 +206,15 @@ class _FieldsPageState extends State<FieldsPage> {
 }
 
 class _FieldTile extends StatelessWidget {
-  const _FieldTile({required this.row, required this.onToggle});
+  const _FieldTile({
+    required this.row,
+    required this.onToggle,
+    required this.onEdit,
+  });
 
   final Map<String, dynamic> row;
   final VoidCallback onToggle;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -206,8 +231,9 @@ class _FieldTile extends StatelessWidget {
         title: Text(row['name'] as String),
         subtitle: Text(details),
         trailing: PopupMenuButton<String>(
-          onSelected: (_) => onToggle(),
+          onSelected: (value) => value == 'edit' ? onEdit() : onToggle(),
           itemBuilder: (context) => [
+            PopupMenuItem(value: 'edit', child: Text(l10n.editField)),
             PopupMenuItem(
               value: 'toggle',
               child: Text(active ? l10n.deactivate : l10n.activate),

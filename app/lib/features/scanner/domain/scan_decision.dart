@@ -16,15 +16,20 @@ class ScanDecision {
   final LocalDirection? direction;
 }
 
-/// [todaysScans] are the accepted scan times (UTC) of this worker on the
-/// current Philippine date, in any order. An even count means the next scan
-/// is a clock in, an odd count means a clock out.
+/// [todaysScans] are the accepted scan times (UTC) of this worker since the
+/// last End field day, in any order. An even count means the next scan is a
+/// clock in, an odd count means a clock out.
+///
+/// [recentScans] are all of the worker's scans today, used only for the
+/// 30-second repeat rule. It defaults to [todaysScans].
 ScanDecision decideScan({
   required List<DateTime> todaysScans,
   required DateTime now,
+  List<DateTime>? recentScans,
 }) {
-  if (todaysScans.isNotEmpty) {
-    final last = todaysScans.reduce((a, b) => a.isAfter(b) ? a : b);
+  final recent = recentScans ?? todaysScans;
+  if (recent.isNotEmpty) {
+    final last = recent.reduce((a, b) => a.isAfter(b) ? a : b);
     if (now.difference(last) < repeatScanWindow) {
       return const ScanDecision.repeat();
     }

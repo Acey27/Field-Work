@@ -5,12 +5,14 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/login_page.dart';
 import '../../features/auth/presentation/first_login_page.dart';
 import '../../features/dashboard/presentation/dashboard_page.dart';
+import '../../features/notifications/presentation/notifications_page.dart';
 import '../../features/scanner/presentation/scanner_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
 import '../../features/workers/presentation/workers_page.dart';
 import '../../features/fields/presentation/fields_page.dart';
 import '../../features/technicians/presentation/technicians_page.dart';
 import '../../features/admin_tools/presentation/admin_tools_page.dart';
+import '../../features/admin_tools/presentation/time_records_page.dart';
 import '../l10n/app_localizations.dart';
 
 final selectedRoleProvider = NotifierProvider<RoleNotifier, AppRole>(
@@ -55,7 +57,13 @@ GoRouter buildRouter(ValueChanged<Locale> onLocaleChanged) {
           onFields: () => context.go('/admin/fields'),
           onTechnicians: () => context.go('/admin/technicians'),
           onAdminTools: () => context.go('/admin/tools'),
+          onNotifications: () => context.go('/admin/notifications'),
         ),
+      ),
+      GoRoute(
+        path: '/admin/notifications',
+        builder: (context, state) =>
+            NotificationsPage(onLocaleChanged: onLocaleChanged),
       ),
       GoRoute(
         path: '/admin/workers',
@@ -76,6 +84,11 @@ GoRouter buildRouter(ValueChanged<Locale> onLocaleChanged) {
         path: '/admin/tools',
         builder: (context, state) =>
             AdminToolsPage(onLocaleChanged: onLocaleChanged),
+      ),
+      GoRoute(
+        path: '/admin/time-records',
+        builder: (context, state) =>
+            TimeRecordsPage(onLocaleChanged: onLocaleChanged),
       ),
       GoRoute(
         path: '/super-admin',

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -5,8 +7,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/l10n/app_localizations.dart';
 import '../../../core/utils/ph_time.dart';
 import '../../../shared/widgets/language_toggle.dart';
+import '../../notifications/data/notification_service.dart';
 import '../data/admin_service.dart';
 import 'end_field_day_dialog.dart';
+import 'flagged_section.dart';
+import 'stats_section.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({
@@ -15,6 +20,7 @@ class DashboardPage extends StatefulWidget {
     required this.onFields,
     required this.onTechnicians,
     required this.onAdminTools,
+    required this.onNotifications,
     super.key,
   });
 
@@ -23,6 +29,7 @@ class DashboardPage extends StatefulWidget {
   final VoidCallback onFields;
   final VoidCallback onTechnicians;
   final VoidCallback onAdminTools;
+  final VoidCallback onNotifications;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -30,28 +37,49 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   final _service = AdminService();
+  final _notifications = NotificationService();
   late Future<_AdminData> _data;
+  Timer? _unreadTimer;
+  int _unread = 0;
+  int _refreshCount = 0;
 
   @override
   void initState() {
     super.initState();
     _data = _load();
-  }
-
-  Future<_AdminData> _load() async {
-    final results = await Future.wait([
-      _service.todayFieldDays(),
-      _service.statistics(),
-      _service.flaggedScans(),
-    ]);
-    return _AdminData(
-      fieldDays: results[0] as List<Map<String, dynamic>>,
-      statistics: results[1] as Map<String, dynamic>,
-      flags: results[2] as List<Map<String, dynamic>>,
+    _loadUnread();
+    // New reminders arrive while the page is open (the job runs every 5 min).
+    _unreadTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => _loadUnread(),
     );
   }
 
-  void _refresh() => setState(() => _data = _load());
+  @override
+  void dispose() {
+    _unreadTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadUnread() async {
+    try {
+      final count = await _notifications.unreadCount();
+      if (mounted) setState(() => _unread = count);
+    } on Object {
+      // The bell just keeps its last number.
+    }
+  }
+
+  Future<_AdminData> _load() async {
+    return _AdminData(fieldDays: await _service.todayFieldDays());
+  }
+
+  /// Reloads the field days, and rebuilds the statistics and flagged
+  /// sections (a new key makes them fetch again).
+  void _refresh() => setState(() {
+    _refreshCount++;
+    _data = _load();
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -61,8 +89,20 @@ class _DashboardPageState extends State<DashboardPage> {
         title: Text(l10n.dashboard),
         actions: [
           IconButton(
+            tooltip: l10n.notifications,
+            onPressed: widget.onNotifications,
+            icon: Badge(
+              isLabelVisible: _unread > 0,
+              label: Text('$_unread'),
+              child: const Icon(Icons.notifications),
+            ),
+          ),
+          IconButton(
             tooltip: l10n.refresh,
-            onPressed: _refresh,
+            onPressed: () {
+              _refresh();
+              _loadUnread();
+            },
             icon: const Icon(Icons.refresh),
           ),
           LanguageToggle(onChanged: widget.onLocaleChanged),
@@ -107,7 +147,10 @@ class _DashboardPageState extends State<DashboardPage> {
                   label: Text(l10n.adminTools),
                 ),
                 const SizedBox(height: 16),
-                _StatsGrid(statistics: data.statistics),
+                StatsSection(
+                  key: ValueKey('stats-$_refreshCount'),
+                  service: _service,
+                ),
                 const SizedBox(height: 24),
                 _SectionTitle(title: l10n.todayFieldDays),
                 ...data.fieldDays.map(
@@ -122,9 +165,10 @@ class _DashboardPageState extends State<DashboardPage> {
                   _EmptyState(message: l10n.noFieldDays),
                 const SizedBox(height: 24),
                 _SectionTitle(title: l10n.flaggedActivity),
-                ...data.flags.map((row) => _FlagTile(row: row)),
-                if (data.flags.isEmpty)
-                  _EmptyState(message: l10n.noFlaggedActivity),
+                FlaggedSection(
+                  key: ValueKey('flagged-$_refreshCount'),
+                  service: _service,
+                ),
                 const SizedBox(height: 24),
                 OutlinedButton.icon(
                   onPressed: () => context.go('/login'),
@@ -179,59 +223,8 @@ class _DashboardPageState extends State<DashboardPage> {
 }
 
 class _AdminData {
-  const _AdminData({
-    required this.fieldDays,
-    required this.statistics,
-    required this.flags,
-  });
+  const _AdminData({required this.fieldDays});
   final List<Map<String, dynamic>> fieldDays;
-  final Map<String, dynamic> statistics;
-  final List<Map<String, dynamic>> flags;
-}
-
-class _StatsGrid extends StatelessWidget {
-  const _StatsGrid({required this.statistics});
-  final Map<String, dynamic> statistics;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final values = [
-      (l10n.workersPresent, statistics['workers_present'] ?? 0, Icons.groups),
-      (l10n.totalMinutes, statistics['total_minutes'] ?? 0, Icons.schedule),
-      (l10n.fieldDays, statistics['field_days'] ?? 0, Icons.landscape),
-      (l10n.notEnded, statistics['not_ended'] ?? 0, Icons.warning_amber),
-    ];
-    return GridView.count(
-      crossAxisCount: MediaQuery.sizeOf(context).width > 700 ? 4 : 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      childAspectRatio: 1.5,
-      children: values
-          .map(
-            (item) => Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(item.$3),
-                    const Spacer(),
-                    Text(
-                      '${item.$2}',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    Text(item.$1),
-                  ],
-                ),
-              ),
-            ),
-          )
-          .toList(),
-    );
-  }
 }
 
 class _FieldDayTile extends StatelessWidget {
@@ -288,25 +281,6 @@ class _FieldDayTile extends StatelessWidget {
     final time = formatPhTime(syncUtc);
     final syncDate = formatPhDate(phDateOf(syncUtc));
     return syncDate == workDate ? time : '$syncDate $time';
-  }
-}
-
-class _FlagTile extends StatelessWidget {
-  const _FlagTile({required this.row});
-  final Map<String, dynamic> row;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: Theme.of(context).colorScheme.errorContainer,
-      child: ListTile(
-        title: Text('${row['worker_name'] ?? ''} · ${row['result'] ?? ''}'),
-        subtitle: Text(
-          '${row['technician_name'] ?? ''} · ${row['field_name'] ?? ''}\n'
-          '${(row['flags'] as List?)?.join(', ') ?? ''}',
-        ),
-      ),
-    );
   }
 }
 

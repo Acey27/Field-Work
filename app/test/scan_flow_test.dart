@@ -48,6 +48,60 @@ void main() {
     });
   });
 
+  group('AppDatabase.clockedInCount', () {
+    final dayStart = DateTime.utc(2026, 10, 18, 16); // 12:00 AM on the 19th, PH
+    late AppDatabase database;
+
+    Future<void> scan(String worker, DateTime at, {String tech = 'tech-1'}) =>
+        database.addScan(
+          scanId: '$worker-${at.toIso8601String()}-$tech',
+          workerId: worker,
+          qrCheck: 'abc',
+          technicianId: tech,
+          fieldId: 'field-1',
+          scannedAt: at,
+        );
+
+    setUp(() => database = AppDatabase(NativeDatabase.memory()));
+    tearDown(() => database.close());
+
+    test('counts workers with an odd number of scans', () async {
+      await scan('W-00001', DateTime.utc(2026, 10, 19, 1));
+      await scan('W-00002', DateTime.utc(2026, 10, 19, 1));
+      await scan('W-00002', DateTime.utc(2026, 10, 19, 5)); // clocked out
+      await scan('W-00003', DateTime.utc(2026, 10, 19, 2));
+      expect(await database.clockedInCount('tech-1', dayStart), 2);
+    });
+
+    test('is zero after End field day', () async {
+      await scan('W-00001', DateTime.utc(2026, 10, 19, 1));
+      await scan('W-00002', DateTime.utc(2026, 10, 19, 2));
+      await database.addEndFieldDay(
+        technicianId: 'tech-1',
+        fieldId: 'field-1',
+        endedAt: DateTime.utc(2026, 10, 19, 8),
+      );
+      expect(await database.clockedInCount('tech-1', dayStart), 0);
+      await scan('W-00001', DateTime.utc(2026, 10, 19, 9));
+      expect(await database.clockedInCount('tech-1', dayStart), 1);
+    });
+
+    test('ignores other technicians and earlier days', () async {
+      await scan('W-00001', DateTime.utc(2026, 10, 19, 1), tech: 'tech-2');
+      await scan('W-00002', DateTime.utc(2026, 10, 18, 5)); // yesterday
+      expect(await database.clockedInCount('tech-1', dayStart), 0);
+    });
+
+    test('ignores scans the server rejected', () async {
+      await scan('W-00001', DateTime.utc(2026, 10, 19, 1));
+      await database.markScanRejected(
+        'W-00001-${DateTime.utc(2026, 10, 19, 1).toIso8601String()}-tech-1',
+        {'result': 'blocked_bad_qr'},
+      );
+      expect(await database.clockedInCount('tech-1', dayStart), 0);
+    });
+  });
+
   group('ScanRepository.processScan', () {
     const context = ScanContext(technicianId: 'tech-1', fieldId: 'field-1');
     late AppDatabase database;
@@ -164,6 +218,26 @@ void main() {
         context: context,
         rawValue: 'W-00001.abc',
         now: DateTime.utc(2026, 10, 19, 16, 1),
+      );
+      expect(next.direction, LocalDirection.clockIn);
+    });
+
+    test('a scan after End field day is a clock in again', () async {
+      await addWorker();
+      await repository.processScan(
+        context: context,
+        rawValue: 'W-00001.abc',
+        now: DateTime.utc(2026, 10, 19, 1),
+      );
+      await database.addEndFieldDay(
+        technicianId: 'tech-1',
+        fieldId: 'field-1',
+        endedAt: DateTime.utc(2026, 10, 19, 8),
+      );
+      final next = await repository.processScan(
+        context: context,
+        rawValue: 'W-00001.abc',
+        now: DateTime.utc(2026, 10, 19, 9),
       );
       expect(next.direction, LocalDirection.clockIn);
     });
