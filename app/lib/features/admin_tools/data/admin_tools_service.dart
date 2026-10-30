@@ -5,15 +5,6 @@ import '../../../core/supabase/supabase_client.dart';
 class AdminToolsService {
   SupabaseClient get _client => Supabase.instance.client;
 
-  Future<List<Map<String, dynamic>>> weeklyMasterlist() async {
-    _requireConfigured();
-    final value = await _client.rpc<List<dynamic>>('admin_weekly_masterlist');
-    return value
-        .whereType<Map<String, dynamic>>()
-        .map(Map<String, dynamic>.from)
-        .toList();
-  }
-
   /// Current values of the time settings, keyed by setting name (`HH:MM`).
   Future<Map<String, String>> timeSettings() async {
     _requireConfigured();
@@ -23,7 +14,8 @@ class AdminToolsService {
         .inFilter('key', timeSettingKeys);
     return {
       for (final row in rows)
-        if (row['value'] is String) row['key'] as String: row['value'] as String,
+        if (row['value'] is String)
+          row['key'] as String: row['value'] as String,
     };
   }
 

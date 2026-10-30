@@ -251,6 +251,11 @@ end;
 $$;
 
 -- 5. Fields: edit (SPEC.md section 10).
+-- A previous development deployment may already have the JSONB version from
+-- the post-testing fix. Drop it so this migration remains replayable; 018
+-- recreates the final JSONB signature after the legacy row-returning version.
+drop function if exists public.admin_update_field(uuid, text, text, text);
+
 create or replace function public.admin_update_field(
   p_field_id uuid,
   p_name text,

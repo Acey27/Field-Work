@@ -751,6 +751,11 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
         actions: [
           LanguageToggle(onChanged: widget.onLocaleChanged),
           IconButton(
+            tooltip: l10n.workerLookup,
+            onPressed: () => context.push('/technician/worker-lookup'),
+            icon: const Icon(Icons.person_search),
+          ),
+          IconButton(
             tooltip: l10n.logOut,
             onPressed: _logOut,
             icon: const Icon(Icons.logout),

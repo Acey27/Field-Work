@@ -121,6 +121,7 @@ class AppLocalizations {
     'E_SETTING_INVALID' => _text('errSettingInvalid'),
     'E_SESSION_NOT_FOUND' => _text('errSessionNotFound'),
     'E_FIELD_NOT_FOUND' => _text('errFieldNotFound'),
+    'E_WEEK_NOT_MONDAY' => _text('errWeekNotMonday'),
     _ => _text('errAdminAction'),
   };
   String get errDevicePending => _text('errDevicePending');
@@ -346,6 +347,20 @@ class AppLocalizations {
   String get addTimeRecord => _text('addTimeRecord');
   String get weeklyMasterlist => _text('weeklyMasterlist');
   String get loadMasterlist => _text('loadMasterlist');
+  String get selectWeek => _text('selectWeek');
+  String get exportMasterlist => _text('exportMasterlist');
+  String get printMasterlist => _text('printMasterlist');
+  String get masterlistHeaders => _text('masterlistHeaders');
+  String get noMasterlistRows => _text('noMasterlistRows');
+  String unendedWeekWarning(int count) =>
+      _text('unendedWeekWarning').replaceFirst('{count}', '$count');
+  String get notEndedCell => _text('notEndedCell');
+  String get exportSaved => _text('exportSaved');
+  String get changedAfterExport => _text('changedAfterExport');
+  String get workerLookup => _text('workerLookup');
+  String get lookupWorkerId => _text('lookupWorkerId');
+  String get loadWorkerWeek => _text('loadWorkerWeek');
+  String get noWorkerWeek => _text('noWorkerWeek');
   String get workerId => _text('workerId');
   String get fieldId => _text('fieldId');
   String get technicianId => _text('technicianId');
@@ -405,11 +420,9 @@ class AppLocalizations {
       'appTitle': 'QR Attendance',
       'login': 'Log in',
       'logOut': 'Log out',
-      'logOutWithPending':
-          '{count} scans have not been uploaded yet. They stay on this phone. Log out anyway?',
+      'logOutWithPending': '{count} scans have not been uploaded yet. They stay on this phone. Log out anyway?',
       'errSessionEnded': 'Your session ended. Please log in again.',
-      'oldFieldDaysHint':
-          'Earlier days that were never ended are listed here too. End them so their workers are clocked out.',
+      'oldFieldDaysHint': 'Earlier days that were never ended are listed here too. End them so their workers are clocked out.',
       'username': 'Username',
       'email': 'Email',
       'password': 'Password',
@@ -495,6 +508,7 @@ class AppLocalizations {
       'errTimeOutBeforeIn': 'Time out must be later than time in.',
       'errOverlap': 'This worker already has time recorded at that time. Check the other records.',
       'errAdminAction': 'The action could not be completed. Try again.',
+      'errWeekNotMonday': 'Choose a Monday for the week.',
       'errSettingInvalid': 'This value is not allowed for this setting.',
       'errDevicePending':
           'This phone is waiting for approval. Ask your admin to approve it.',
@@ -657,6 +671,19 @@ class AppLocalizations {
       'addTimeRecord': 'Add time record',
       'weeklyMasterlist': 'Weekly masterlist',
       'loadMasterlist': 'Load masterlist',
+      'selectWeek': 'Select week',
+      'exportMasterlist': 'Export Excel',
+      'printMasterlist': 'Print masterlist',
+      'masterlistHeaders': 'ID,Name of the Worker,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday,Total Weekly Hours,Total Weekly Present,Signature',
+      'noMasterlistRows': 'No attendance was recorded for this week.',
+      'unendedWeekWarning': '{count} field days in this week are not ended. You can export anyway.',
+      'notEndedCell': 'Not ended',
+      'exportSaved': 'Masterlist exported.',
+      'changedAfterExport': 'This week changed after its last export.',
+      'workerLookup': 'Worker lookup',
+      'lookupWorkerId': 'Worker ID',
+      'loadWorkerWeek': 'Load current week',
+      'noWorkerWeek': 'No attendance recorded this week.',
       'workerId': 'Worker ID',
       'fieldId': 'Field ID',
       'technicianId': 'Technician ID',
@@ -719,11 +746,9 @@ class AppLocalizations {
       'appTitle': 'QR Attendance',
       'login': 'Mag-log in',
       'logOut': 'Mag-log out',
-      'logOutWithPending':
-          '{count} scan ang hindi pa naa-upload. Mananatili ang mga ito sa telepono. Mag-log out pa rin?',
+      'logOutWithPending': '{count} scan ang hindi pa naa-upload. Mananatili ang mga ito sa telepono. Mag-log out pa rin?',
       'errSessionEnded': 'Natapos ang iyong session. Mag-log in muli.',
-      'oldFieldDaysHint':
-          'Kasama rin dito ang mga naunang araw na hindi natapos. Tapusin ang mga ito para ma-clock out ang mga manggagawa.',
+      'oldFieldDaysHint': 'Kasama rin dito ang mga naunang araw na hindi natapos. Tapusin ang mga ito para ma-clock out ang mga manggagawa.',
       'username': 'Username',
       'email': 'Email',
       'password': 'Password',
@@ -811,6 +836,7 @@ class AppLocalizations {
           'Dapat mas huli ang oras ng labas kaysa oras ng pasok.',
       'errOverlap': 'May naitala nang oras ang manggagawang ito sa oras na iyon. Tingnan ang ibang talaan.',
       'errAdminAction': 'Hindi natapos ang aksyon. Subukan muli.',
+      'errWeekNotMonday': 'Pumili ng Lunes para sa linggo.',
       'errSettingInvalid':
           'Hindi pinapayagan ang halagang ito sa setting na ito.',
       'errDevicePending': 'Naghihintay ng pag-apruba ang teleponong ito. Hilingin sa admin na aprubahan ito.',
@@ -978,6 +1004,20 @@ class AppLocalizations {
       'addTimeRecord': 'Magdagdag ng tala ng oras',
       'weeklyMasterlist': 'Lingguhang masterlist',
       'loadMasterlist': 'I-load ang masterlist',
+      'selectWeek': 'Pumili ng linggo',
+      'exportMasterlist': 'I-export sa Excel',
+      'printMasterlist': 'I-print ang masterlist',
+      'masterlistHeaders': 'ID,Pangalan ng manggagawa,Lunes,Martes,Miyerkules,Huwebes,Biyernes,Sabado,Linggo,Kabuuang oras sa linggo,Kabuuang araw na pumasok,Signature',
+      'noMasterlistRows': 'Walang attendance para sa linggong ito.',
+      'unendedWeekWarning': '{count} field day sa linggong ito ang hindi pa tapos. Maaari pa ring mag-export.',
+      'notEndedCell': 'Hindi pa tapos',
+      'exportSaved': 'Na-export ang masterlist.',
+      'changedAfterExport':
+          'Nagbago ang linggong ito matapos ang huling export.',
+      'workerLookup': 'Hanapin ang worker',
+      'lookupWorkerId': 'Worker ID',
+      'loadWorkerWeek': 'I-load ang kasalukuyang linggo',
+      'noWorkerWeek': 'Walang attendance ngayong linggo.',
       'workerId': 'Worker ID',
       'fieldId': 'Field ID',
       'technicianId': 'Technician ID',

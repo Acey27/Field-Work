@@ -891,7 +891,7 @@ Value types are fixed. Times are `"HH:MM"` in Philippine time.
 | `004_scan_functions.sql` | B (A reviews) | `register_device`, `get_my_context`, `get_worker_cache`, `ingest_scans`, `end_field_day`, `get_my_field_day`, `get_worker_week` |
 | `005_phase2_remediation.sql` | B (A reviews) | `get_login_state`, corrected function volatility, and contract-aligned RLS/table privileges |
 | `006_phase4_admin.sql` | B | Phase 4 admin dashboard, flagged activity, statistics, manual field-day ending, manual corrections, QR reissue, and CSV import |
-| `006_masterlist.sql` | B (A tests lookup) | Section 4.13, fixture, tests |
+| `021_masterlist.sql` | B (A tests lookup) | Section 4.13, export-change trigger, fixture, tests |
 | `007_worker_admin.sql` to `011_worker_audit_fix.sql` | B | Phase 4 worker, field, device and admin tool functions (already applied) |
 | `012_field_days_admin.sql` | B | `get_today_field_days`, `suggest_end_time`, `admin_end_field_day` (sections 4.8, 4.9) |
 | `013_settings_validation.sql` | B | `admin_set_setting` validates `HH:MM` and boolean values (`E_SETTING_INVALID`) |

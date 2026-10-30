@@ -7,6 +7,7 @@ import '../../features/auth/presentation/first_login_page.dart';
 import '../../features/dashboard/presentation/dashboard_page.dart';
 import '../../features/notifications/presentation/notifications_page.dart';
 import '../../features/scanner/presentation/scanner_page.dart';
+import '../../features/scanner/presentation/worker_lookup_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
 import '../../features/workers/presentation/workers_page.dart';
 import '../../features/fields/presentation/fields_page.dart';
@@ -48,6 +49,11 @@ GoRouter buildRouter(ValueChanged<Locale> onLocaleChanged) {
         path: '/technician',
         builder: (context, state) =>
             ScannerPage(onLocaleChanged: onLocaleChanged),
+      ),
+      GoRoute(
+        path: '/technician/worker-lookup',
+        builder: (context, state) =>
+            WorkerLookupPage(onLocaleChanged: onLocaleChanged),
       ),
       GoRoute(
         path: '/admin',

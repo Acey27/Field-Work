@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -9,6 +10,8 @@ import '../../../shared/widgets/language_toggle.dart';
 import '../../technicians/data/technician_service.dart';
 import '../data/admin_tools_service.dart';
 import '../data/paper_sheet.dart';
+import '../../masterlist/data/masterlist.dart';
+import '../../masterlist/data/masterlist_print.dart';
 
 class AdminToolsPage extends StatefulWidget {
   const AdminToolsPage({required this.onLocaleChanged, super.key});
@@ -21,7 +24,11 @@ class AdminToolsPage extends StatefulWidget {
 
 class _AdminToolsPageState extends State<AdminToolsPage> {
   final _service = AdminToolsService();
-  List<Map<String, dynamic>> _masterlist = [];
+  final _masterlistService = MasterlistService();
+  List<MasterlistRow> _masterlist = [];
+  List<UnendedFieldDay> _unended = [];
+  bool _changedAfterExport = false;
+  DateTime _masterlistWeek = phWeekStart(phDateOf(DateTime.now()));
   Map<String, String> _times = {};
   int? _repeatMinutes;
   bool _busy = false;
@@ -194,6 +201,14 @@ class _AdminToolsPageState extends State<AdminToolsPage> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
+          if (_changedAfterExport)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                l10n.changedAfterExport,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
           const Divider(height: 32),
           Text(
             l10n.manualTimeRecord,
@@ -248,19 +263,63 @@ class _AdminToolsPageState extends State<AdminToolsPage> {
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
+            onPressed: _busy ? null : _pickMasterlistWeek,
+            icon: const Icon(Icons.calendar_today),
+            label: Text(_weekLabel(_masterlistWeek)),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
             onPressed: _busy ? null : _loadMasterlist,
-            icon: const Icon(Icons.download),
+            icon: const Icon(Icons.refresh),
             label: Text(l10n.loadMasterlist),
           ),
-          for (final row in _masterlist)
-            ListTile(
-              dense: true,
-              title: Text('${row['worker_name']} • ${row['work_date']}'),
-              subtitle: Text(
-                '${row['technician_name']} / ${row['field_name']} • '
-                '${row['minutes']} min',
+          if (_unended.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                l10n.unendedWeekWarning(_unended.length),
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _busy || _masterlist.isEmpty
+                      ? null
+                      : () => _exportMasterlist(l10n),
+                  icon: const Icon(Icons.file_download),
+                  label: Text(l10n.exportMasterlist),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _busy || _masterlist.isEmpty
+                      ? null
+                      : () => _printMasterlist(l10n),
+                  icon: const Icon(Icons.print),
+                  label: Text(l10n.printMasterlist),
+                ),
+              ),
+            ],
+          ),
+          if (_masterlist.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(l10n.noMasterlistRows),
+            )
+          else
+            for (final row in _masterlist)
+              ListTile(
+                dense: true,
+                title: Text('${row.workerId} ${row.workerName}'),
+                subtitle: Text(
+                  '${row.technicianCode} / ${row.fieldLabel} • '
+                  '${formatMinutes(row.totalMinutes)}',
+                ),
+              ),
         ],
       ),
     );
@@ -319,10 +378,103 @@ class _AdminToolsPageState extends State<AdminToolsPage> {
   Future<void> _loadMasterlist() async {
     setState(() => _busy = true);
     try {
-      final rows = await _service.weeklyMasterlist();
-      if (mounted) setState(() => _masterlist = rows);
-    } on Object {
+      final rows = await _masterlistService.load(_masterlistWeek);
+      final unended = await _masterlistService.loadUnended(_masterlistWeek);
+      final changed = await _masterlistService.hasChangedAfterExport(
+        _masterlistWeek,
+      );
+      if (mounted) {
+        setState(() {
+          _masterlist = rows;
+          _unended = unended;
+          _changedAfterExport = changed;
+        });
+      }
+    } on PostgrestException catch (error) {
+      if (mounted) {
+        _showMessage(AppLocalizations.of(context).adminError(error.message));
+      }
+    } on Object catch (error) {
+      debugPrint('weekly masterlist load failed: $error');
       if (mounted) _showError(AppLocalizations.of(context));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _pickMasterlistWeek() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _masterlistWeek,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now(),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _masterlistWeek = phWeekStart(
+        DateTime.utc(picked.year, picked.month, picked.day),
+      );
+      _masterlist = [];
+      _unended = [];
+      _changedAfterExport = false;
+    });
+  }
+
+  String _weekLabel(DateTime weekStart) {
+    final end = weekStart.add(const Duration(days: 6));
+    return '${DateFormat('d MMM yyyy').format(weekStart)} - '
+        '${DateFormat('d MMM yyyy').format(end)}';
+  }
+
+  List<String> _headers(AppLocalizations l10n) =>
+      l10n.masterlistHeaders.split(',');
+
+  Future<void> _exportMasterlist(AppLocalizations l10n) async {
+    setState(() => _busy = true);
+    try {
+      final fileName = 'masterlist-${formatPhDate(_masterlistWeek)}.xlsx';
+      final bytes = await _masterlistService.buildExcel(
+        rows: _masterlist,
+        weekLabel: _weekLabel(_masterlistWeek),
+        notEndedLabel: l10n.notEndedCell,
+        headers: _headers(l10n),
+      );
+      final saved = await _masterlistService.saveExcel(bytes, fileName);
+      if (saved != null) {
+        await _masterlistService.recordExport(
+          weekStart: _masterlistWeek,
+          fileName: fileName,
+          rowCount: _masterlist.length,
+        );
+        if (mounted) _showMessage(l10n.exportSaved);
+      }
+    } on PostgrestException catch (error) {
+      if (mounted) _showMessage(l10n.adminError(error.message));
+    } on Object catch (error) {
+      debugPrint('weekly masterlist export failed: $error');
+      if (mounted) _showError(l10n);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _printMasterlist(AppLocalizations l10n) async {
+    setState(() => _busy = true);
+    try {
+      final bytes = await buildMasterlistPdf(
+        weekStart: _masterlistWeek,
+        rows: _masterlist,
+        weekLabel: _weekLabel(_masterlistWeek),
+        notEndedLabel: l10n.notEndedCell,
+        headers: _headers(l10n),
+      );
+      await Printing.layoutPdf(
+        name: 'masterlist-${formatPhDate(_masterlistWeek)}',
+        onLayout: (_) async => bytes,
+      );
+    } on Object catch (error) {
+      debugPrint('weekly masterlist print failed: $error');
+      if (mounted) _showError(l10n);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
