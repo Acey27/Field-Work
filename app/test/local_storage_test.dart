@@ -36,6 +36,38 @@ void main() {
     expect((await database.pendingScans()).single.scanId, 'scan-1');
   });
 
+  test('waiting scans and events can be limited to one technician', () async {
+    Future<void> scan(String id, String technician) => database.addScan(
+      scanId: id,
+      workerId: 'W-00001',
+      qrCheck: 'abc',
+      technicianId: technician,
+      fieldId: 'field-1',
+      scannedAt: DateTime.utc(2026, 10, 28),
+    );
+    await scan('a-1', 'tech-a');
+    await scan('a-2', 'tech-a');
+    await scan('b-1', 'tech-b');
+    await database.addEndFieldDay(
+      technicianId: 'tech-b',
+      fieldId: 'field-1',
+      endedAt: DateTime.utc(2026, 10, 28, 9),
+    );
+
+    expect(await database.pendingScanCount(technicianId: 'tech-a'), 2);
+    expect(await database.pendingScanCount(technicianId: 'tech-b'), 1);
+    expect(await database.pendingCount(technicianId: 'tech-a'), 2);
+    expect(await database.pendingCount(technicianId: 'tech-b'), 2);
+    expect(await database.pendingCount(), 4);
+    expect(
+      (await database.pendingScans(technicianId: 'tech-a'))
+          .map((s) => s.scanId),
+      ['a-1', 'a-2'],
+    );
+    expect(await database.pendingEvents(technicianId: 'tech-a'), isEmpty);
+    expect(await database.pendingEvents(technicianId: 'tech-b'), hasLength(1));
+  });
+
   test(
     'retains the original scan id when marking a duplicate response',
     () async {

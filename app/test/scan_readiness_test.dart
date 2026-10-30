@@ -37,6 +37,40 @@ void main() {
     });
   });
 
+  group('endsSession', () {
+    test('an account or a phone the admin turned off ends the session', () {
+      expect(endsSession('E_ACCOUNT_DISABLED'), isTrue);
+      expect(endsSession('E_DEVICE_REVOKED'), isTrue);
+    });
+
+    test('everything else keeps the technician logged in', () {
+      expect(endsSession('E_DEVICE_PENDING'), isFalse);
+      expect(endsSession('E_DEVICE_NOT_APPROVED'), isFalse);
+      expect(endsSession('E_NO_ACTIVE_FIELD'), isFalse);
+      expect(endsSession('E_MUST_CHANGE_PASSWORD'), isFalse);
+      expect(endsSession('boom'), isFalse);
+      expect(endsSession(null), isFalse);
+    });
+
+    test('the login page can explain every reason in both languages', () {
+      for (final locale in AppLocalizations.supportedLocales) {
+        final l10n = AppLocalizations(locale);
+        for (final code in [
+          'E_ACCOUNT_DISABLED',
+          'E_DEVICE_REVOKED',
+          'E_SESSION_ENDED',
+        ]) {
+          expect(l10n.authError(code), isNotEmpty);
+          expect(
+            l10n.authError(code),
+            isNot(l10n.authError('E_LOGIN_FAILED')),
+            reason: '$code (${locale.languageCode})',
+          );
+        }
+      }
+    });
+  });
+
   group('readinessFromContext', () {
     test('is ready with a profile and a field', () {
       expect(

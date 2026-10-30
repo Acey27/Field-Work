@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/l10n/app_localizations.dart';
 import '../../../core/utils/ph_time.dart';
 import '../../../shared/widgets/language_toggle.dart';
+import '../../../shared/widgets/refresh_button.dart';
 import '../data/notification_service.dart';
 import '../domain/notification_message.dart';
 
@@ -26,7 +27,18 @@ class _NotificationsPageState extends State<NotificationsPage> {
     _items = _service.list();
   }
 
-  void _refresh() => setState(() => _items = _service.list());
+  // A block body: an arrow callback would return the Future, which Flutter
+  // refuses in a debug build, so the list would not rebuild.
+  //
+  // Completes when the new list has arrived (or failed), so the refresh button
+  // can turn until then.
+  Future<void> _refresh() {
+    final next = _service.list();
+    setState(() {
+      _items = next;
+    });
+    return next.then<void>((_) {}, onError: (Object _) {});
+  }
 
   Future<void> _open(AppNotification notification) async {
     final route = notificationRoute(notification.target, notification.type);
@@ -51,11 +63,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
         title: Text(l10n.notifications),
         leading: BackButton(onPressed: () => context.go('/admin')),
         actions: [
-          IconButton(
-            tooltip: l10n.refresh,
-            onPressed: _refresh,
-            icon: const Icon(Icons.refresh),
-          ),
+          RefreshButton(tooltip: l10n.refresh, onRefresh: _refresh),
           LanguageToggle(onChanged: widget.onLocaleChanged),
         ],
       ),
@@ -82,7 +90,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
             return Center(child: Text(l10n.noNotifications));
           }
           return RefreshIndicator(
-            onRefresh: () async => _refresh(),
+            onRefresh: _refresh,
             child: ListView.separated(
               padding: const EdgeInsets.all(16),
               itemCount: items.length,

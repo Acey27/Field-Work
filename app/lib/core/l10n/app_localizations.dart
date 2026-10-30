@@ -16,6 +16,10 @@ class AppLocalizations {
 
   String get appTitle => _text('appTitle');
   String get login => _text('login');
+  String get logOut => _text('logOut');
+  String logOutWithPending(int count) =>
+      _text('logOutWithPending').replaceFirst('{count}', '$count');
+  String get oldFieldDaysHint => _text('oldFieldDaysHint');
   String get username => _text('username');
   String get email => _text('email');
   String get password => _text('password');
@@ -57,6 +61,8 @@ class AppLocalizations {
   String authError(String code) => switch (code) {
     'E_SERVER_CONFIG' => _text('errServerConfig'),
     'E_ACCOUNT_DISABLED' => _text('errAccountDisabled'),
+    'E_DEVICE_REVOKED' => _text('errDeviceRevoked'),
+    'E_SESSION_ENDED' => _text('errSessionEnded'),
     'E_MUST_CHANGE_PASSWORD' => _text('errMustChangePassword'),
     'E_PASSWORD_WEAK' => _text('errPasswordWeak'),
     'E_PASSWORD_UPDATE_FAILED' => _text('errPasswordUpdateFailed'),
@@ -133,14 +139,33 @@ class AppLocalizations {
   String get scanDetected => _text('scanDetected');
   String get scanBadCard => _text('scanBadCard');
   String get scanInactive => _text('scanInactive');
+
+  /// A scan the server refused after the phone had already shown it
+  /// (CONTRACT.md section 13): "Juan: not saved. Another technician has this
+  /// worker clocked in...". [result] is the `blocked_*` value.
+  String scanRefused(String name, String result) =>
+      _text('scanRefused')
+          .replaceFirst('{name}', name)
+          .replaceFirst('{reason}', switch (result) {
+            'blocked_held_elsewhere' => _text('refusedHeldElsewhere'),
+            'blocked_bad_qr' => _text('scanBadCard'),
+            'blocked_unknown_worker' => _text('refusedUnknownWorker'),
+            'blocked_inactive_worker' => _text('scanInactive'),
+            'blocked_inactive_field' => _text('refusedInactiveField'),
+            'blocked_inactive_technician' => _text('refusedInactiveTechnician'),
+            'blocked_not_assigned' => _text('refusedNotAssigned'),
+            _ => _text('refusedOther'),
+          });
   String get scanRepeat => _text('scanRepeat');
   String get scanNotReady => _text('scanNotReady');
-  String clockedInAt(String name, String time) => _text('clockedInAt')
-      .replaceFirst('{name}', name)
-      .replaceFirst('{time}', time);
-  String clockedOutAt(String name, String time) => _text('clockedOutAt')
-      .replaceFirst('{name}', name)
-      .replaceFirst('{time}', time);
+  String clockedInAt(String name, String time) =>
+      _text('clockedInAt')
+          .replaceFirst('{name}', name)
+          .replaceFirst('{time}', time);
+  String clockedOutAt(String name, String time) =>
+      _text('clockedOutAt')
+          .replaceFirst('{name}', name)
+          .replaceFirst('{time}', time);
   String get notifications => _text('notifications');
   String get noNotifications => _text('noNotifications');
   String notifFieldDayNotEnded(int count, String names) =>
@@ -150,8 +175,25 @@ class AppLocalizations {
   String notifFieldDayNotEndedOne(String names) =>
       _text('notifFieldDayNotEndedOne').replaceFirst('{names}', names);
   String get notifDeviceApproval => _text('notifDeviceApproval');
+
+  /// "Worker clocked out: Juan (scanned by another technician)". [reason] is
+  /// the data kept in the notification, never translated text.
+  String notifWorkerClockedOut(String name, String? reason) =>
+      _text('notifWorkerClockedOut')
+          .replaceFirst('{name}', name)
+          .replaceFirst(
+            '{reason}',
+            _text(
+              reason == 'safety_net' ? 'reasonSafetyNet' : 'reasonClosedOther',
+            ),
+          );
   String get notifGeneric => _text('notifGeneric');
   String get reminderRepeatMinutes => _text('reminderRepeatMinutes');
+
+  /// Under the reminder settings: the reminder only tells the admin. [button]
+  /// is the name of the End field day button.
+  String reminderHint(String button) =>
+      _text('reminderHint').replaceFirst('{button}', button);
   String minutesValue(int count) =>
       _text('minutesValue').replaceFirst('{count}', '$count');
   // Time records
@@ -196,9 +238,10 @@ class AppLocalizations {
   String get csvRowsInFile => _text('csvRowsInFile');
   String get includeDuplicates => _text('includeDuplicates');
   String get close => _text('close');
-  String importRowLine(int row, String message) => _text('importRowLine')
-      .replaceFirst('{row}', '$row')
-      .replaceFirst('{message}', message);
+  String importRowLine(int row, String message) =>
+      _text('importRowLine')
+          .replaceFirst('{row}', '$row')
+          .replaceFirst('{message}', message);
   String importDuplicateLine(int row, String workerId) =>
       _text('importDuplicateLine')
           .replaceFirst('{row}', '$row')
@@ -207,23 +250,21 @@ class AppLocalizations {
       _text('importDone').replaceFirst('{count}', '$count');
   String importMore(int count) =>
       _text('importMore').replaceFirst('{count}', '$count');
+  String importRepeatLine(int row, int firstRow) =>
+      _text('importRepeatLine')
+          .replaceFirst('{row}', '$row')
+          .replaceFirst('{first}', '$firstRow');
 
-  /// "Row 12: The date of birth is not valid." message for a CSV row code.
+  /// "Column 'cp number' was not used": a header the system does not know.
+  String csvColumnNotUsed(String name) =>
+      _text('csvColumnNotUsed').replaceFirst('{name}', name);
+
+  /// "Row 12: The name is missing." message for a CSV row code.
   String csvError(String code) => switch (code) {
     'E_CSV_NAME_MISSING' => _text('csvNameMissing'),
-    'E_CSV_DOB_INVALID' => _text('csvDobInvalid'),
-    'E_CSV_GENDER_INVALID' => _text('csvGenderInvalid'),
     'E_CSV_ROW_TOO_LONG' => _text('csvRowTooLong'),
     _ => _text('errAdminAction'),
   };
-  // Worker form
-  String get gender => _text('gender');
-  String get male => _text('male');
-  String get female => _text('female');
-  String get otherGender => _text('otherGender');
-  String get notSpecified => _text('notSpecified');
-  String get dateOfBirth => _text('dateOfBirth');
-  String get clearDate => _text('clearDate');
   // Fields and technicians
   String get editField => _text('editField');
   String get turnOffAccount => _text('turnOffAccount');
@@ -258,9 +299,10 @@ class AppLocalizations {
       _text('presentDaysValue').replaceFirst('{count}', '$count');
 
   /// Hours and minutes in the current language, for example "5 h 33 min".
-  String durationShort(int minutes) => _text('durationShort')
-      .replaceFirst('{h}', '${minutes ~/ 60}')
-      .replaceFirst('{m}', '${minutes % 60}');
+  String durationShort(int minutes) =>
+      _text('durationShort')
+          .replaceFirst('{h}', '${minutes ~/ 60}')
+          .replaceFirst('{m}', '${minutes % 60}');
 
   /// Readable name of a flag kind from `get_flagged_items`.
   String flagLabel(String kind) => switch (kind) {
@@ -287,6 +329,13 @@ class AppLocalizations {
   String get device => _text('device');
   String get approveDevice => _text('approveDevice');
   String get revokeDevice => _text('revokeDevice');
+
+  /// The status of a phone as the admin reads it (not the stored word).
+  String deviceStatus(String status) => switch (status) {
+    'approved' => _text('deviceApproved'),
+    'revoked' => _text('deviceRevoked'),
+    _ => _text('devicePending'),
+  };
   String get adminTools => _text('adminTools');
   String get scanHoursStart => _text('scanHoursStart');
   String get scanHoursEnd => _text('scanHoursEnd');
@@ -355,6 +404,12 @@ class AppLocalizations {
     'en': {
       'appTitle': 'QR Attendance',
       'login': 'Log in',
+      'logOut': 'Log out',
+      'logOutWithPending':
+          '{count} scans have not been uploaded yet. They stay on this phone. Log out anyway?',
+      'errSessionEnded': 'Your session ended. Please log in again.',
+      'oldFieldDaysHint':
+          'Earlier days that were never ended are listed here too. End them so their workers are clocked out.',
       'username': 'Username',
       'email': 'Email',
       'password': 'Password',
@@ -438,8 +493,7 @@ class AppLocalizations {
       'errTimeInFuture': 'This time has not happened yet. Check the time.',
       'errDateMismatch': 'The time must be on the same date.',
       'errTimeOutBeforeIn': 'Time out must be later than time in.',
-      'errOverlap':
-          'This worker already has time recorded at that time. Check the other records.',
+      'errOverlap': 'This worker already has time recorded at that time. Check the other records.',
       'errAdminAction': 'The action could not be completed. Try again.',
       'errSettingInvalid': 'This value is not allowed for this setting.',
       'errDevicePending':
@@ -449,21 +503,28 @@ class AppLocalizations {
       'errDeviceRevoked': 'This phone is no longer allowed. Ask your admin.',
       'errNoActiveField':
           'You have no field yet. Ask your admin to assign one.',
-      'errScanOffline':
-          'Cannot reach the server. Connect to the internet, then tap Try again.',
+      'errScanOffline': 'Cannot reach the server. Connect to the internet, then tap Try again.',
       'scanLoading': 'Getting your field ready...',
       'cameraOpen': 'Open camera',
       'cameraClose': 'Close camera',
       'cameraOff': 'Camera is off. Tap Open camera to scan.',
-      'cameraError':
-          'The camera cannot be used. Allow camera access in settings, then try again.',
+      'cameraError': 'The camera cannot be used. Allow camera access in settings, then try again.',
       'scanLooking': 'Looking for a QR code...',
       'scanDetected': 'QR code detected',
       'scanBadCard': 'This card is not valid. Ask your admin for a new card.',
       'scanInactive': 'This worker is turned off. Tell your admin.',
+      'scanRefused': '{name}: not saved. {reason}',
+      'refusedHeldElsewhere': 'Another technician has this worker clocked in. Only that technician can clock them out.',
+      'refusedUnknownWorker':
+          'This worker is not in the system. Tell your admin.',
+      'refusedInactiveField': 'This field is turned off. Tell your admin.',
+      'refusedInactiveTechnician':
+          'Your account is turned off. Tell your admin.',
+      'refusedNotAssigned':
+          'You are not assigned to this field. Tell your admin.',
+      'refusedOther': 'The scan was not saved. Tell your admin.',
       'scanRepeat': 'Already scanned a moment ago.',
-      'scanNotReady':
-          'Scanning is not ready. Connect to the internet, check that you have a field, then tap sync.',
+      'scanNotReady': 'Scanning is not ready. Connect to the internet, check that you have a field, then tap sync.',
       'clockedInAt': '{name}: CLOCKED IN {time}',
       'clockedOutAt': '{name}: CLOCKED OUT {time}',
       'notifications': 'Notifications',
@@ -473,8 +534,12 @@ class AppLocalizations {
       'notifFieldDayNotEndedOne':
           '1 technician has not ended their field day: {names}',
       'notifDeviceApproval': 'A phone is waiting for your approval.',
+      'notifWorkerClockedOut': 'Worker clocked out: {name} ({reason})',
+      'reasonSafetyNet': 'scanned by another technician',
+      'reasonClosedOther': 'closed by the system',
       'notifGeneric': 'You have a new notice.',
       'reminderRepeatMinutes': 'Minutes before the second reminder',
+      'reminderHint': 'At the reminder time you get a notice about field days that are not ended. It does not end them: use "{button}" on the dashboard.',
       'minutesValue': '{count} minutes',
       // Time records
       'timeRecords': 'Time records',
@@ -494,8 +559,7 @@ class AppLocalizations {
       'openTimeRecords': 'Open time records',
       // Paper sheet
       'paperSheet': 'Daily paper sheet',
-      'paperSheetHint':
-          'Print a sheet for one technician and one date. Keep a few copies in case the phone fails.',
+      'paperSheetHint': 'Print a sheet for one technician and one date. Keep a few copies in case the phone fails.',
       'printSheet': 'Print sheet',
       'sheetTitle': 'Daily attendance sheet',
       'sheetTechnician': 'Technician',
@@ -512,8 +576,7 @@ class AppLocalizations {
       'noCardsToPrint': 'There are no active workers to print.',
       // CSV import
       'chooseCsvFile': 'Choose CSV file',
-      'csvHelp':
-          'The first row must be the column names: name, cp_no, address, gender, date_of_birth.',
+      'csvHelp': 'The first row must be the column names: name, cp_no, address. Any other column is not used.',
       'csvChecking': 'Checking the file...',
       'csvImporting': 'Adding workers...',
       'csvNoNameColumn': 'The file needs a "name" column in the first row.',
@@ -522,29 +585,20 @@ class AppLocalizations {
       'csvRowsInFile': 'Rows in file',
       'importRowLine': 'Row {row}: {message}',
       'importDuplicateLine': 'Row {row}: possible duplicate of {id}',
+      'importRepeatLine': 'Row {row}: same name as row {first} in this file',
+      'csvColumnNotUsed': "Column '{name}' was not used.",
       'csvNameMissing': 'The name is missing.',
-      'csvDobInvalid': 'The date of birth is not valid.',
-      'csvGenderInvalid': 'The gender must be male, female, or other.',
       'csvRowTooLong': 'A value in this row is too long.',
       'includeDuplicates': 'Also add the possible duplicates',
       'importDone': 'Added {count} workers.',
       'importMore': '+{count} more',
       'close': 'Close',
-      // Worker form
-      'gender': 'Gender',
-      'male': 'Male',
-      'female': 'Female',
-      'otherGender': 'Other',
-      'notSpecified': 'Not specified',
-      'dateOfBirth': 'Date of birth',
-      'clearDate': 'Clear date',
       // Fields and technicians
       'editField': 'Edit field',
       'turnOffAccount': 'Turn off account',
       'turnOnAccount': 'Turn on account',
       'accountOff': 'Account off',
-      'confirmTurnOff':
-          "Turn off {name}'s account? They will not be able to scan until you turn it on again.",
+      'confirmTurnOff': "Turn off {name}'s account? They will not be able to scan until you turn it on again.",
       'confirmTurnOn': "Turn on {name}'s account?",
       // Statistics and flagged list
       'statsToday': 'Today',
@@ -590,6 +644,9 @@ class AppLocalizations {
       'device': 'Device',
       'approveDevice': 'Approve device',
       'revokeDevice': 'Revoke device',
+      'deviceApproved': 'Approved',
+      'deviceRevoked': 'Revoked',
+      'devicePending': 'Waiting for approval',
       'adminTools': 'Admin tools',
       'scanHoursStart': 'Scan hours start',
       'scanHoursEnd': 'Scan hours end',
@@ -661,6 +718,12 @@ class AppLocalizations {
     'fil': {
       'appTitle': 'QR Attendance',
       'login': 'Mag-log in',
+      'logOut': 'Mag-log out',
+      'logOutWithPending':
+          '{count} scan ang hindi pa naa-upload. Mananatili ang mga ito sa telepono. Mag-log out pa rin?',
+      'errSessionEnded': 'Natapos ang iyong session. Mag-log in muli.',
+      'oldFieldDaysHint':
+          'Kasama rin dito ang mga naunang araw na hindi natapos. Tapusin ang mga ito para ma-clock out ang mga manggagawa.',
       'username': 'Username',
       'email': 'Email',
       'password': 'Password',
@@ -678,8 +741,7 @@ class AppLocalizations {
       'offlineWithPending': 'Walang internet: {count} naghihintay',
       'confirm': 'Kumpirmahin',
       'invalidQr': 'Hindi wastong QR code ng manggagawa',
-      'workerNotCached':
-          'Wala pa sa teleponong ito ang manggagawa. Pindutin ang sync, saka mag-scan muli.',
+      'workerNotCached': 'Wala pa sa teleponong ito ang manggagawa. Pindutin ang sync, saka mag-scan muli.',
       'scanSaved': 'Na-save ang scan',
       'errDateNotToday': 'Hindi tugma ang petsa ng field day sa araw na ito.',
       'errFieldDayNotFound': 'Walang field day para sa technician na ito.',
@@ -742,38 +804,44 @@ class AppLocalizations {
       'endTimeRequired':
           'I-type ang oras ng pagtatapos. Walang scan sa petsang ito.',
       'errReasonRequired': 'Magsulat ng dahilan.',
-      'errTimeInFuture': 'Hindi pa dumarating ang oras na ito. Tingnan ang oras.',
+      'errTimeInFuture':
+          'Hindi pa dumarating ang oras na ito. Tingnan ang oras.',
       'errDateMismatch': 'Dapat nasa parehong petsa ang oras.',
       'errTimeOutBeforeIn':
           'Dapat mas huli ang oras ng labas kaysa oras ng pasok.',
-      'errOverlap':
-          'May naitala nang oras ang manggagawang ito sa oras na iyon. Tingnan ang ibang talaan.',
+      'errOverlap': 'May naitala nang oras ang manggagawang ito sa oras na iyon. Tingnan ang ibang talaan.',
       'errAdminAction': 'Hindi natapos ang aksyon. Subukan muli.',
-      'errSettingInvalid': 'Hindi pinapayagan ang halagang ito sa setting na ito.',
-      'errDevicePending':
-          'Naghihintay ng pag-apruba ang teleponong ito. Hilingin sa admin na aprubahan ito.',
-      'errDeviceNotApproved':
-          'Hindi pa rehistrado ang teleponong ito. Mag-log in muli para marehistro ito.',
+      'errSettingInvalid':
+          'Hindi pinapayagan ang halagang ito sa setting na ito.',
+      'errDevicePending': 'Naghihintay ng pag-apruba ang teleponong ito. Hilingin sa admin na aprubahan ito.',
+      'errDeviceNotApproved': 'Hindi pa rehistrado ang teleponong ito. Mag-log in muli para marehistro ito.',
       'errDeviceRevoked':
           'Hindi na pinapayagan ang teleponong ito. Magtanong sa admin.',
       'errNoActiveField':
           'Wala ka pang field. Hilingin sa admin na magtalaga ng isa.',
-      'errScanOffline':
-          'Hindi maabot ang server. Kumonekta sa internet, saka pindutin ang Subukan muli.',
+      'errScanOffline': 'Hindi maabot ang server. Kumonekta sa internet, saka pindutin ang Subukan muli.',
       'scanLoading': 'Inihahanda ang iyong field...',
       'cameraOpen': 'Buksan ang camera',
       'cameraClose': 'Isara ang camera',
-      'cameraOff': 'Nakasara ang camera. Pindutin ang Buksan ang camera para mag-scan.',
-      'cameraError':
-          'Hindi magamit ang camera. Payagan ang camera sa settings, saka subukan muli.',
+      'cameraOff':
+          'Nakasara ang camera. Pindutin ang Buksan ang camera para mag-scan.',
+      'cameraError': 'Hindi magamit ang camera. Payagan ang camera sa settings, saka subukan muli.',
       'scanLooking': 'Naghahanap ng QR code...',
       'scanDetected': 'May nakitang QR code',
       'scanBadCard':
           'Hindi valid ang card na ito. Humingi ng bagong card sa admin.',
       'scanInactive': 'Naka-off ang manggagawang ito. Sabihin sa admin.',
+      'scanRefused': '{name}: hindi na-save. {reason}',
+      'refusedHeldElsewhere': 'Naka-clock in ang manggagawang ito sa ibang technician. Ang technician lang na iyon ang puwedeng mag-clock out sa kanya.',
+      'refusedUnknownWorker':
+          'Wala sa sistema ang manggagawang ito. Sabihin sa admin.',
+      'refusedInactiveField': 'Naka-off ang field na ito. Sabihin sa admin.',
+      'refusedInactiveTechnician': 'Naka-off ang account mo. Sabihin sa admin.',
+      'refusedNotAssigned':
+          'Hindi ka naka-assign sa field na ito. Sabihin sa admin.',
+      'refusedOther': 'Hindi na-save ang scan. Sabihin sa admin.',
       'scanRepeat': 'Na-scan na ito kani-kanina lang.',
-      'scanNotReady':
-          'Hindi pa handa ang pag-scan. Kumonekta sa internet, tiyaking may field ka, saka pindutin ang sync.',
+      'scanNotReady': 'Hindi pa handa ang pag-scan. Kumonekta sa internet, tiyaking may field ka, saka pindutin ang sync.',
       'clockedInAt': '{name}: NAKA-CLOCK IN {time}',
       'clockedOutAt': '{name}: NAKA-CLOCK OUT {time}',
       'notifications': 'Mga abiso',
@@ -782,10 +850,13 @@ class AppLocalizations {
           '{count} technician ang hindi pa nagtatapos ng field day: {names}',
       'notifFieldDayNotEndedOne':
           '1 technician ang hindi pa nagtatapos ng field day: {names}',
-      'notifDeviceApproval':
-          'May teleponong naghihintay ng iyong pag-apruba.',
+      'notifDeviceApproval': 'May teleponong naghihintay ng iyong pag-apruba.',
+      'notifWorkerClockedOut': 'Na-clock out ang manggagawa: {name} ({reason})',
+      'reasonSafetyNet': 'na-scan ng ibang technician',
+      'reasonClosedOther': 'isinara ng sistema',
       'notifGeneric': 'May bago kang abiso.',
       'reminderRepeatMinutes': 'Minuto bago ang ikalawang paalala',
+      'reminderHint': 'Sa oras ng paalala, makakatanggap ka ng abiso tungkol sa mga field day na hindi pa tapos. Hindi nito tinatapos ang mga ito: gamitin ang "{button}" sa dashboard.',
       'minutesValue': '{count} minuto',
       // Time records
       'timeRecords': 'Mga talaan ng oras',
@@ -802,12 +873,12 @@ class AppLocalizations {
       'timeRecordIncomplete': 'Pumili ng manggagawa, technician at field.',
       'errSessionNotFound':
           'Hindi nakita ang talaan ng oras na ito. I-refresh ang listahan.',
-      'errFieldNotFound': 'Hindi nakita ang field na ito. I-refresh ang listahan.',
+      'errFieldNotFound':
+          'Hindi nakita ang field na ito. I-refresh ang listahan.',
       'openTimeRecords': 'Buksan ang mga talaan ng oras',
       // Paper sheet
       'paperSheet': 'Papel na sheet para sa araw',
-      'paperSheetHint':
-          'Mag-print ng sheet para sa isang technician at isang petsa. Magtabi ng ilang kopya kung masira ang telepono.',
+      'paperSheetHint': 'Mag-print ng sheet para sa isang technician at isang petsa. Magtabi ng ilang kopya kung masira ang telepono.',
       'printSheet': 'I-print ang sheet',
       'sheetTitle': 'Sheet ng pagpasok sa araw',
       'sheetTechnician': 'Technician',
@@ -824,39 +895,31 @@ class AppLocalizations {
       'noCardsToPrint': 'Walang aktibong manggagawa na ipi-print.',
       // CSV import
       'chooseCsvFile': 'Pumili ng CSV file',
-      'csvHelp':
-          'Dapat pangalan ng mga column ang unang hilera: name, cp_no, address, gender, date_of_birth.',
+      'csvHelp': 'Dapat pangalan ng mga column ang unang hilera: name, cp_no, address. Hindi ginagamit ang ibang column.',
       'csvChecking': 'Sinusuri ang file...',
       'csvImporting': 'Idinadagdag ang mga manggagawa...',
-      'csvNoNameColumn': 'Kailangan ng column na "name" sa unang hilera ng file.',
+      'csvNoNameColumn':
+          'Kailangan ng column na "name" sa unang hilera ng file.',
       'csvEmpty': 'Walang manggagawa sa file.',
       'csvReadError': 'Hindi mabasa ang file. Pumili ng CSV file.',
       'csvRowsInFile': 'Mga hilera sa file',
       'importRowLine': 'Hilera {row}: {message}',
       'importDuplicateLine': 'Hilera {row}: posibleng kapareho ni {id}',
+      'importRepeatLine':
+          'Hilera {row}: kapareho ng pangalan sa hilera {first} ng file',
+      'csvColumnNotUsed': "Hindi ginamit ang column na '{name}'.",
       'csvNameMissing': 'Walang pangalan.',
-      'csvDobInvalid': 'Hindi wasto ang petsa ng kapanganakan.',
-      'csvGenderInvalid': 'Dapat male, female, o other ang gender.',
       'csvRowTooLong': 'Masyadong mahaba ang isang halaga sa hilerang ito.',
       'includeDuplicates': 'Idagdag din ang mga posibleng doble',
       'importDone': 'Naidagdag ang {count} manggagawa.',
       'importMore': '+{count} pa',
       'close': 'Isara',
-      // Worker form
-      'gender': 'Kasarian',
-      'male': 'Lalaki',
-      'female': 'Babae',
-      'otherGender': 'Iba pa',
-      'notSpecified': 'Hindi tinukoy',
-      'dateOfBirth': 'Petsa ng kapanganakan',
-      'clearDate': 'Alisin ang petsa',
       // Fields and technicians
       'editField': 'I-edit ang field',
       'turnOffAccount': 'I-off ang account',
       'turnOnAccount': 'I-on ang account',
       'accountOff': 'Naka-off ang account',
-      'confirmTurnOff':
-          'I-off ang account ni {name}? Hindi siya makakapag-scan hangga\'t hindi mo ito ibinabalik.',
+      'confirmTurnOff': 'I-off ang account ni {name}? Hindi siya makakapag-scan hangga\'t hindi mo ito ibinabalik.',
       'confirmTurnOn': 'I-on ang account ni {name}?',
       // Statistics and flagged list
       'statsToday': 'Ngayon',
@@ -902,6 +965,9 @@ class AppLocalizations {
       'device': 'Device',
       'approveDevice': 'Aprubahan ang device',
       'revokeDevice': 'Bawiin ang device',
+      'deviceApproved': 'Aprubado',
+      'deviceRevoked': 'Binawi',
+      'devicePending': 'Naghihintay ng pag-apruba',
       'adminTools': 'Mga admin tool',
       'scanHoursStart': 'Simula ng oras ng scan',
       'scanHoursEnd': 'Pagtatapos ng oras ng scan',

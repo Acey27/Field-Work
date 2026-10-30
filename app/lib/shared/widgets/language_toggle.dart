@@ -18,10 +18,31 @@ class LanguageToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final current = Localizations.localeOf(context).languageCode;
+    // On a phone the full names are wider than the rest of the app bar, which
+    // overflowed the bar on a 320 px screen.
+    final compact = MediaQuery.sizeOf(context).width < 480;
     return SegmentedButton<String>(
+      showSelectedIcon: !compact,
+      style: compact
+          ? const ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              padding: WidgetStatePropertyAll(
+                EdgeInsets.symmetric(horizontal: 8),
+              ),
+            )
+          : null,
       segments: [
-        ButtonSegment(value: 'en', label: Text(l10n.english)),
-        ButtonSegment(value: 'fil', label: Text(l10n.filipino)),
+        ButtonSegment(
+          value: 'en',
+          label: Text(compact ? 'EN' : l10n.english),
+          tooltip: l10n.english,
+        ),
+        ButtonSegment(
+          value: 'fil',
+          label: Text(compact ? 'FIL' : l10n.filipino),
+          tooltip: l10n.filipino,
+        ),
       ],
       selected: {current},
       onSelectionChanged: (selection) {

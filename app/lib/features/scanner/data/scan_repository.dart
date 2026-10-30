@@ -2,6 +2,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/local/app_database.dart';
+import '../../../core/utils/moments.dart';
 import '../../../core/utils/ph_time.dart';
 import '../domain/qr_payload.dart';
 import '../domain/scan_decision.dart';
@@ -54,11 +55,16 @@ class ScanRepository {
   /// The whole phone-side scan: check the card, apply the 30-second repeat
   /// rule, work out in or out, and save the scan before anything is shown
   /// (CONTRACT.md section 6). [position] is only asked for when a scan is saved.
+  ///
+  /// [takenOver] maps a worker ID to the moment up to which this phone's own
+  /// scans of that worker no longer count, because another technician took the
+  /// worker over (see `takeoverCutoff`). The next scan is then a clock in.
   Future<ScanResult> processScan({
     required ScanContext context,
     required String? rawValue,
     required DateTime now,
     Future<Position?> Function()? position,
+    Map<String, DateTime> takenOver = const {},
   }) async {
     final payload = QrPayload.parse(rawValue);
     if (payload == null) return const ScanResult(ScanOutcome.invalid);
@@ -72,11 +78,12 @@ class ScanRepository {
     }
     final dayStart = phTimeToUtc(phDateOf(now), 0, 0);
     final allToday = await database.workerScanTimes(worker.id, dayStart);
-    // After End field day everyone is clocked out, so the next scan is a
-    // clock in again, whatever happened before.
-    final resetAt = await database.latestEndFieldDay(
-      context.technicianId,
-      dayStart,
+    // After End field day everyone is clocked out, and after another
+    // technician took this worker over they are no longer clocked in here, so
+    // the next scan is a clock in again, whatever happened before.
+    final resetAt = laterOf(
+      await database.latestEndFieldDay(context.technicianId, dayStart),
+      takenOver[worker.id],
     );
     final sinceReset = resetAt == null
         ? allToday

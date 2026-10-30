@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
+import '../utils/moments.dart';
 import 'database_connection.dart';
 
 part 'app_database.g.dart';
@@ -115,7 +116,15 @@ class AppDatabase extends _$AppDatabase {
   /// Workers this phone has clocked in and not out since [fromUtc] (the start
   /// of the Philippine day), counting only scans after the last End field day.
   /// An odd number of scans means the worker is still clocked in.
-  Future<int> clockedInCount(String technicianId, DateTime fromUtc) async {
+  ///
+  /// [takenOver] maps a worker ID to the moment up to which this phone's scans
+  /// of that worker no longer count, because another technician took the worker
+  /// over (see `takeoverCutoff`).
+  Future<int> clockedInCount(
+    String technicianId,
+    DateTime fromUtc, {
+    Map<String, DateTime> takenOver = const {},
+  }) async {
     final cutoff = await latestEndFieldDay(technicianId, fromUtc);
     final rows =
         await (select(localScans)..where(
@@ -127,26 +136,50 @@ class AppDatabase extends _$AppDatabase {
             .get();
     final perWorker = <String, int>{};
     for (final row in rows) {
-      if (cutoff != null && !row.scannedAt.toUtc().isAfter(cutoff)) continue;
+      final skipUntil = laterOf(cutoff, takenOver[row.workerId]);
+      if (skipUntil != null && !row.scannedAt.toUtc().isAfter(skipUntil)) {
+        continue;
+      }
       perWorker.update(row.workerId, (count) => count + 1, ifAbsent: () => 1);
     }
     return perWorker.values.where((count) => count.isOdd).length;
   }
 
-  Future<int> pendingCount() async {
-    final scans = await (select(
-      localScans,
-    )..where((row) => row.uploadState.equals('pending'))).get();
-    final events = await (select(
-      localEvents,
-    )..where((row) => row.uploadState.equals('pending'))).get();
-    return scans.length + events.length;
+  // The "pending" queries take the technician whose phone session this is.
+  // After a log out another technician can log in on the same phone, and
+  // their uploads must never carry the earlier technician's waiting scans.
+  // Without an ID they return everything.
+
+  Future<int> pendingCount({String? technicianId}) async {
+    final scans = await pendingScanCount(technicianId: technicianId);
+    final events =
+        await (select(localEvents)..where(
+              (row) =>
+                  row.uploadState.equals('pending') &
+                  _eventOwner(row, technicianId),
+            ))
+            .get();
+    return scans + events.length;
   }
 
-  Future<int> pendingScanCount() async =>
-      (select(localScans)..where((row) => row.uploadState.equals('pending')))
+  Future<int> pendingScanCount({String? technicianId}) async =>
+      (select(localScans)..where(
+            (row) =>
+                row.uploadState.equals('pending') &
+                _scanOwner(row, technicianId),
+          ))
           .get()
           .then((rows) => rows.length);
+
+  Expression<bool> _scanOwner($LocalScansTable row, String? technicianId) =>
+      technicianId == null
+      ? const Constant(true)
+      : row.technicianId.equals(technicianId);
+
+  Expression<bool> _eventOwner($LocalEventsTable row, String? technicianId) =>
+      technicianId == null
+      ? const Constant(true)
+      : row.technicianId.equals(technicianId);
 
   Future<void> addScan({
     required String scanId,
@@ -188,16 +221,27 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  Future<List<LocalScan>> pendingScans({int limit = 50}) =>
+  Future<List<LocalScan>> pendingScans({
+    int limit = 50,
+    String? technicianId,
+  }) =>
       (select(localScans)
-            ..where((row) => row.uploadState.equals('pending'))
+            ..where(
+              (row) =>
+                  row.uploadState.equals('pending') &
+                  _scanOwner(row, technicianId),
+            )
             ..orderBy([(row) => OrderingTerm(expression: row.scannedAt)])
             ..limit(limit))
           .get();
 
-  Future<List<LocalEvent>> pendingEvents() =>
+  Future<List<LocalEvent>> pendingEvents({String? technicianId}) =>
       (select(localEvents)
-            ..where((row) => row.uploadState.equals('pending'))
+            ..where(
+              (row) =>
+                  row.uploadState.equals('pending') &
+                  _eventOwner(row, technicianId),
+            )
             ..orderBy([(row) => OrderingTerm(expression: row.endedAt)]))
           .get();
 

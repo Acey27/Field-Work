@@ -52,11 +52,7 @@ class _AdminToolsPageState extends State<AdminToolsPage> {
   Future<void> _pickSheetDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime(
-        _sheetDate.year,
-        _sheetDate.month,
-        _sheetDate.day,
-      ),
+      initialDate: DateTime(_sheetDate.year, _sheetDate.month, _sheetDate.day),
       firstDate: DateTime(2024),
       lastDate: DateTime.now().add(const Duration(days: 30)),
     );
@@ -190,6 +186,14 @@ class _AdminToolsPageState extends State<AdminToolsPage> {
                 : l10n.minutesValue(_repeatMinutes!),
             onPressed: () => _setRepeatMinutes(l10n),
           ),
+          // The reminder never ends a field day by itself (SPEC.md section 8).
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              l10n.reminderHint(l10n.endFieldDay),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
           const Divider(height: 32),
           Text(
             l10n.manualTimeRecord,
@@ -268,10 +272,7 @@ class _AdminToolsPageState extends State<AdminToolsPage> {
   }
 
   /// A 12-hour (AM/PM) time picker, whatever the phone's 24-hour setting is.
-  Future<TimeOfDay?> _pickTime(
-    AppLocalizations l10n,
-    TimeOfDay initial,
-  ) {
+  Future<TimeOfDay?> _pickTime(AppLocalizations l10n, TimeOfDay initial) {
     return showTimePicker(
       context: context,
       helpText: l10n.pickTime,
@@ -298,7 +299,9 @@ class _AdminToolsPageState extends State<AdminToolsPage> {
       // Read it back: "Saved" is shown only if the database really has it.
       final stored = await _service.timeSettings();
       if (!mounted) return;
-      setState(() => _times = stored.isEmpty ? {..._times, key: value} : stored);
+      setState(
+        () => _times = stored.isEmpty ? {..._times, key: value} : stored,
+      );
       if (stored.isNotEmpty && stored[key] != value) {
         _showError(l10n);
         return;

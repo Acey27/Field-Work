@@ -2,38 +2,97 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/l10n/app_localizations.dart';
+import '../../../core/utils/ph_time.dart';
 import '../../../shared/widgets/language_toggle.dart';
+import '../../../shared/widgets/refresh_button.dart';
 import '../data/technician_service.dart';
 
 class TechniciansPage extends StatefulWidget {
-  const TechniciansPage({required this.onLocaleChanged, super.key});
+  const TechniciansPage({
+    required this.onLocaleChanged,
+    this.service,
+    super.key,
+  });
 
   final ValueChanged<Locale> onLocaleChanged;
+
+  /// Only tests pass one; the app talks to Supabase.
+  final TechnicianService? service;
 
   @override
   State<TechniciansPage> createState() => _TechniciansPageState();
 }
 
 class _TechniciansPageState extends State<TechniciansPage> {
-  final _service = TechnicianService();
-  late Future<_TechnicianData> _data;
+  late final TechnicianService _service = widget.service ?? TechnicianService();
+  _TechnicianData? _data;
+  bool _loadFailed = false;
 
   @override
   void initState() {
     super.initState();
-    _data = _load();
+    _load();
   }
 
-  Future<_TechnicianData> _load() async {
-    return _TechnicianData(
-      technicians: await _service.listTechnicians(),
-      fields: await _service.listFields(),
-      assignments: await _service.listAssignments(),
-      devices: await _service.listDevices(),
-    );
+  /// Loads everything from the server. The page on screen is replaced only when
+  /// the new data arrives, so a change never blanks the page or loses the
+  /// scroll position.
+  /// [report] tells the admin when a refresh they asked for failed.
+  Future<void> _load({bool report = false}) async {
+    try {
+      final results = await (
+        _service.listTechnicians(),
+        _service.listFields(),
+        _service.listAssignments(),
+        _service.listDevices(),
+      ).wait;
+      final data = _TechnicianData(
+        technicians: results.$1,
+        fields: results.$2,
+        assignments: results.$3,
+        devices: results.$4,
+      );
+      if (mounted) {
+        setState(() {
+          _data = data;
+          _loadFailed = false;
+        });
+      }
+    } on Object catch (error) {
+      debugPrint('Could not load the technicians: $error');
+      if (!mounted) return;
+      if (_data == null) {
+        setState(() => _loadFailed = true);
+      } else if (report) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context).adminLoadError)),
+        );
+      }
+    }
   }
 
-  void _refresh() => setState(() => _data = _load());
+  Future<void> _refresh() => _load(report: true);
+
+  void _retry() {
+    setState(() => _loadFailed = false);
+    _load();
+  }
+
+  /// Runs a change, tells the admin if it failed, and then always shows what
+  /// the server has now.
+  Future<void> _change(Future<void> Function() action) async {
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await action();
+    } on Object catch (error) {
+      debugPrint('Technician change failed: $error');
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.technicianOperationFailed)),
+      );
+    }
+    await _load();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +101,7 @@ class _TechniciansPageState extends State<TechniciansPage> {
       appBar: AppBar(
         title: Text(l10n.technicians),
         actions: [
-          IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
+          RefreshButton(tooltip: l10n.refresh, onRefresh: _refresh),
           LanguageToggle(onChanged: widget.onLocaleChanged),
         ],
       ),
@@ -51,123 +110,133 @@ class _TechniciansPageState extends State<TechniciansPage> {
         icon: const Icon(Icons.person_add),
         label: Text(l10n.createTechnician),
       ),
-      body: FutureBuilder<_TechnicianData>(
-        future: _data,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: FilledButton(onPressed: _refresh, child: Text(l10n.retry)),
-            );
-          }
-          final data = snapshot.data!;
-          final fieldsById = {
-            for (final field in data.fields)
-              field['id'] as String: field['name'] as String,
-          };
-          final assignments = {
-            for (final row in data.assignments)
-              row['technician_id'] as String:
-                  (row['fields'] as Map?)?['name'] as String? ?? '',
-          };
-          final deviceCounts = <String, int>{};
-          for (final device in data.devices) {
-            if (device['status'] == 'pending') {
-              final id = device['technician_id'] as String;
-              deviceCounts[id] = (deviceCounts[id] ?? 0) + 1;
-            }
-          }
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              for (final technician in data.technicians)
-                Card(
-                  child: ListTile(
-                    leading: Icon(
+      body: _body(l10n),
+    );
+  }
+
+  Widget _body(AppLocalizations l10n) {
+    final data = _data;
+    if (data == null) {
+      return _loadFailed
+          ? Center(
+              child: FilledButton(onPressed: _retry, child: Text(l10n.retry)),
+            )
+          : const Center(child: CircularProgressIndicator());
+    }
+    final fieldsById = {
+      for (final field in data.fields)
+        field['id'] as String: field['name'] as String,
+    };
+    final assignments = {
+      for (final row in data.assignments)
+        row['technician_id'] as String:
+            (row['fields'] as Map?)?['name'] as String? ?? '',
+    };
+    final deviceCounts = <String, int>{};
+    for (final device in data.devices) {
+      if (device['status'] == 'pending') {
+        final id = device['technician_id'] as String;
+        deviceCounts[id] = (deviceCounts[id] ?? 0) + 1;
+      }
+    }
+    final techniciansById = {
+      for (final technician in data.technicians)
+        technician['id'] as String: technician,
+    };
+    // Phones waiting for approval come first.
+    final devices = [...data.devices]
+      ..sort((a, b) {
+        final pendingFirst = (b['status'] == 'pending' ? 1 : 0).compareTo(
+          a['status'] == 'pending' ? 1 : 0,
+        );
+        return pendingFirst != 0
+            ? pendingFirst
+            : '${b['registered_at']}'.compareTo('${a['registered_at']}');
+      });
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        for (final technician in data.technicians)
+          Card(
+            child: ListTile(
+              leading: Icon(
+                technician['active'] == true ? Icons.badge : Icons.no_accounts,
+              ),
+              title: Text('${technician['full_name']} (${technician['code']})'),
+              subtitle: Text(
+                '${technician['active'] == true ? '' : '${l10n.accountOff} • '}'
+                '${_subtitle(technician['id'] as String, assignments, deviceCounts, l10n)}',
+              ),
+              trailing: PopupMenuButton<String>(
+                onSelected: (value) => value == 'assign'
+                    ? _assign(technician['id'] as String, fieldsById)
+                    : _toggleActive(technician),
+                itemBuilder: (context) => [
+                  PopupMenuItem(value: 'assign', child: Text(l10n.assignField)),
+                  PopupMenuItem(
+                    value: 'active',
+                    child: Text(
                       technician['active'] == true
-                          ? Icons.badge
-                          : Icons.no_accounts,
-                    ),
-                    title: Text(
-                      '${technician['full_name']} (${technician['code']})',
-                    ),
-                    subtitle: Text(
-                      '${technician['active'] == true ? '' : '${l10n.accountOff} • '}'
-                      '${_subtitle(technician['id'] as String, assignments, deviceCounts, l10n)}',
-                    ),
-                    trailing: PopupMenuButton<String>(
-                      onSelected: (value) => value == 'assign'
-                          ? _assign(technician['id'] as String, fieldsById)
-                          : _toggleActive(technician),
-                      itemBuilder: (context) => [
-                        PopupMenuItem(
-                          value: 'assign',
-                          child: Text(l10n.assignField),
-                        ),
-                        PopupMenuItem(
-                          value: 'active',
-                          child: Text(
-                            technician['active'] == true
-                                ? l10n.turnOffAccount
-                                : l10n.turnOnAccount,
-                          ),
-                        ),
-                      ],
+                          ? l10n.turnOffAccount
+                          : l10n.turnOnAccount,
                     ),
                   ),
-                ),
-              if (data.devices.isNotEmpty) ...[
-                const SizedBox(height: 24),
-                Text(
-                  l10n.deviceApprovals,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                for (final device in data.devices)
-                  ListTile(
-                    leading: Icon(
-                      device['status'] == 'approved'
-                          ? Icons.phone_android
-                          : Icons.pending,
-                    ),
-                    title: Text(device['label'] as String? ?? l10n.device),
-                    subtitle: Text('${device['status']}'),
-                    trailing: PopupMenuButton<String>(
-                      onSelected: (action) async {
-                        try {
-                          await _service.setDeviceStatus(
-                            device['id'] as String,
-                            action,
-                          );
-                          _refresh();
-                        } on Object {
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(this.context).showSnackBar(
-                            SnackBar(
-                              content: Text(l10n.technicianOperationFailed),
-                            ),
-                          );
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        if (device['status'] != 'approved')
-                          PopupMenuItem(
-                            value: 'approve_device',
-                            child: Text(l10n.approveDevice),
-                          ),
-                        if (device['status'] == 'approved')
-                          PopupMenuItem(
-                            value: 'revoke_device',
-                            child: Text(l10n.revokeDevice),
-                          ),
-                      ],
-                    ),
-                  ),
-              ],
-            ],
-          );
-        },
+                ],
+              ),
+            ),
+          ),
+        if (devices.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          Text(
+            l10n.deviceApprovals,
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          for (final device in devices)
+            _deviceTile(l10n, device, techniciansById),
+        ],
+      ],
+    );
+  }
+
+  /// "Mark Cruz (T-00003)", then the phone's name, its status and when it was
+  /// first seen, so the admin knows whose phone is waiting.
+  Widget _deviceTile(
+    AppLocalizations l10n,
+    Map<String, dynamic> device,
+    Map<String, Map<String, dynamic>> techniciansById,
+  ) {
+    final owner = techniciansById[device['technician_id']];
+    final seen = DateTime.tryParse('${device['registered_at'] ?? ''}')?.toUtc();
+    final label = device['label'] as String? ?? l10n.device;
+    final details = [
+      label,
+      l10n.deviceStatus('${device['status']}'),
+      if (seen != null) '${formatPhDate(phDateOf(seen))} ${formatPhTime(seen)}',
+    ].join(' • ');
+    return ListTile(
+      leading: Icon(
+        device['status'] == 'approved' ? Icons.phone_android : Icons.pending,
+      ),
+      title: Text(
+        owner == null ? label : '${owner['full_name']} (${owner['code']})',
+      ),
+      subtitle: Text(details),
+      trailing: PopupMenuButton<String>(
+        onSelected: (action) => _change(
+          () => _service.setDeviceStatus(device['id'] as String, action),
+        ),
+        itemBuilder: (context) => [
+          if (device['status'] != 'approved')
+            PopupMenuItem(
+              value: 'approve_device',
+              child: Text(l10n.approveDevice),
+            ),
+          if (device['status'] == 'approved')
+            PopupMenuItem(
+              value: 'revoke_device',
+              child: Text(l10n.revokeDevice),
+            ),
+        ],
       ),
     );
   }
@@ -192,26 +261,30 @@ class _TechniciansPageState extends State<TechniciansPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(l10n.createTechnician),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: name,
-              decoration: InputDecoration(labelText: l10n.fullName),
-            ),
-            TextField(
-              controller: email,
-              decoration: InputDecoration(labelText: l10n.email),
-            ),
-            TextField(
-              controller: password,
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: l10n.startingPassword,
-                helperText: l10n.startingPasswordHint,
+        // Scrollable: on a small screen, or with the keyboard open, the three
+        // fields are taller than the dialog.
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: name,
+                decoration: InputDecoration(labelText: l10n.fullName),
               ),
-            ),
-          ],
+              TextField(
+                controller: email,
+                decoration: InputDecoration(labelText: l10n.email),
+              ),
+              TextField(
+                controller: password,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: l10n.startingPassword,
+                  helperText: l10n.startingPasswordHint,
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -256,7 +329,7 @@ class _TechniciansPageState extends State<TechniciansPage> {
     name.dispose();
     email.dispose();
     password.dispose();
-    if (result == true) _refresh();
+    if (result == true) await _load();
   }
 
   /// Turning an account off asks first, in plain words (SPEC.md section 14).
@@ -283,20 +356,13 @@ class _TechniciansPageState extends State<TechniciansPage> {
         ],
       ),
     );
-    if (confirmed != true) return;
-    try {
-      await _service.setActive(
+    if (confirmed != true || !mounted) return;
+    await _change(
+      () => _service.setActive(
         technicianId: technician['id'] as String,
         active: !turnOff,
-      );
-      _refresh();
-    } on Object {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.technicianOperationFailed)));
-      }
-    }
+      ),
+    );
   }
 
   Future<void> _assign(String technicianId, Map<String, String> fields) async {
@@ -315,17 +381,10 @@ class _TechniciansPageState extends State<TechniciansPage> {
         ],
       ),
     );
-    if (fieldId == null) return;
-    try {
-      await _service.assignField(technicianId: technicianId, fieldId: fieldId);
-      _refresh();
-    } on Object catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.technicianOperationFailed)));
-      }
-    }
+    if (fieldId == null || !mounted) return;
+    await _change(
+      () => _service.assignField(technicianId: technicianId, fieldId: fieldId),
+    );
   }
 }
 

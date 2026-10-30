@@ -12,8 +12,18 @@ void main() {
     'work_date': '2026-10-29',
     'reminder_number': 1,
     'technicians': [
-      {'id': 'a', 'code': 'T-00003', 'name': 'Mark Cruz', 'field_name': 'Field 3'},
-      {'id': 'b', 'code': 'T-00001', 'name': 'Ana Reyes', 'field_name': 'Field 1'},
+      {
+        'id': 'a',
+        'code': 'T-00003',
+        'name': 'Mark Cruz',
+        'field_name': 'Field 3',
+      },
+      {
+        'id': 'b',
+        'code': 'T-00001',
+        'name': 'Ana Reyes',
+        'field_name': 'Field 1',
+      },
     ],
   };
 
@@ -56,7 +66,10 @@ void main() {
         }),
         english.notifGeneric,
       );
-      expect(notificationText(english, 'something_new', {}), english.notifGeneric);
+      expect(
+        notificationText(english, 'something_new', {}),
+        english.notifGeneric,
+      );
     });
 
     test('device approval has its own message', () {
@@ -65,15 +78,54 @@ void main() {
         english.notifDeviceApproval,
       );
     });
+
+    group('worker clocked out by another technician', () {
+      final params = <String, dynamic>{
+        'worker_id': 'W-00002',
+        'worker_name': 'Test worker two',
+        'reason': 'safety_net',
+        'session_id': 's-1',
+      };
+
+      test('names the worker and the reason', () {
+        expect(
+          notificationText(english, 'worker_clocked_out', params),
+          'Worker clocked out: Test worker two (scanned by another technician)',
+        );
+      });
+
+      test('follows the language toggle', () {
+        final text = notificationText(filipino, 'worker_clocked_out', params);
+        expect(text, contains('Test worker two'));
+        expect(text, contains('na-scan ng ibang technician'));
+        expect(text, isNot(contains('Worker clocked out')));
+      });
+
+      test('falls back to the worker ID, and to a plain reason', () {
+        expect(
+          notificationText(english, 'worker_clocked_out', {
+            'worker_id': 'W-00002',
+            'reason': 'something_else',
+          }),
+          'Worker clocked out: W-00002 (closed by the system)',
+        );
+      });
+    });
   });
 
   group('notificationRoute', () {
     test('opens Today\'s field days for a not-ended reminder', () {
-      expect(notificationRoute('today_field_days', 'field_day_not_ended'), '/admin');
+      expect(
+        notificationRoute('today_field_days', 'field_day_not_ended'),
+        '/admin',
+      );
     });
 
     test('opens technicians for a device approval', () {
-      expect(notificationRoute('devices', 'device_approval_needed'), '/admin/technicians');
+      expect(
+        notificationRoute('devices', 'device_approval_needed'),
+        '/admin/technicians',
+      );
     });
 
     test('has no route for other notices', () {

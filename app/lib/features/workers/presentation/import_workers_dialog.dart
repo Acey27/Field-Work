@@ -27,6 +27,11 @@ class _ImportWorkersDialogState extends State<ImportWorkersDialog> {
   _Phase _phase = _Phase.choose;
   String? _fileName;
   List<Map<String, dynamic>> _rows = const [];
+  List<String> _ignoredColumns = const [];
+
+  /// Rows whose name is already used earlier in the same file and that the
+  /// server did not already report (an error or a duplicate of a saved worker).
+  List<FileRepeat> _repeats = const [];
   ImportSummary _preview = const ImportSummary();
   bool _includeDuplicates = false;
   int _added = 0;
@@ -53,6 +58,7 @@ class _ImportWorkersDialogState extends State<ImportWorkersDialog> {
       setState(() {
         _fileName = file.name;
         _rows = parsed.rows;
+        _ignoredColumns = parsed.ignoredColumns;
         _error = switch (parsed.problem) {
           CsvProblem.noNameColumn => l10n.csvNoNameColumn,
           CsvProblem.empty => l10n.csvEmpty,
@@ -81,8 +87,20 @@ class _ImportWorkersDialogState extends State<ImportWorkersDialog> {
         },
       );
       if (!mounted) return;
+      final reported = {
+        for (final e in summary.errors) e.row,
+        for (final d in summary.duplicates) d.row,
+      };
+      // Rows with an error are never added, so they cannot be a first or a
+      // repeated name; rows already reported as duplicates are listed once.
+      final failed = {for (final e in summary.errors) e.row};
+      final repeats = findRepeatsInFile([
+        for (final row in _rows)
+          if (!failed.contains(row['row'])) row,
+      ]).where((repeat) => !reported.contains(repeat.row)).toList();
       setState(() {
         _preview = summary;
+        _repeats = repeats;
         _includeDuplicates = false;
         _phase = _Phase.preview;
       });
@@ -112,10 +130,14 @@ class _ImportWorkersDialogState extends State<ImportWorkersDialog> {
           if (mounted) setState(() => _done = done);
         },
       );
+      // The server skips a name that is already saved, including one saved a
+      // moment ago by an earlier row of this file, so repeats stay out until
+      // the admin ticks the box.
       var added = first.inserted;
-      if (_includeDuplicates && _preview.duplicates.isNotEmpty) {
+      final confirmed = _confirmedRows;
+      if (_includeDuplicates && confirmed.isNotEmpty) {
         final second = await importInChunks(
-          confirmedDuplicateRows(_rows, _preview.duplicates),
+          confirmedDuplicateRows(_rows, confirmed),
           commit: true,
           call: _call,
         );
@@ -135,6 +157,16 @@ class _ImportWorkersDialogState extends State<ImportWorkersDialog> {
       }
     }
   }
+
+  /// Row numbers that are possible duplicates: of a saved worker or of an
+  /// earlier row in the file.
+  Set<int> get _confirmedRows => {
+    for (final d in _preview.duplicates) d.row,
+    for (final r in _repeats) r.row,
+  };
+
+  /// The server counts a repeat as valid in a preview (nothing is saved yet).
+  int get _validCount => _preview.valid - _repeats.length;
 
   String _errorText(AppLocalizations l10n, Object error) =>
       error is PostgrestException
@@ -170,6 +202,7 @@ class _ImportWorkersDialogState extends State<ImportWorkersDialog> {
                 const SizedBox(height: 8),
                 Text('${l10n.csvRowsInFile}: ${_rows.length}'),
               ],
+              ..._ignoredNotice(l10n),
               if (_error != null) ...[
                 const SizedBox(height: 8),
                 Text(
@@ -203,9 +236,20 @@ class _ImportWorkersDialogState extends State<ImportWorkersDialog> {
     }
   }
 
+  /// A warning line for every header the system does not read.
+  List<Widget> _ignoredNotice(AppLocalizations l10n) => [
+    if (_ignoredColumns.isNotEmpty) const SizedBox(height: 8),
+    for (final name in _ignoredColumns)
+      Text(
+        l10n.csvColumnNotUsed(name),
+        style: TextStyle(color: Theme.of(context).colorScheme.tertiary),
+      ),
+  ];
+
   Widget _previewView(AppLocalizations l10n) {
     final errors = _preview.errors;
     final duplicates = _preview.duplicates;
+    final repeats = _repeats;
     final lines = <String>[
       for (final e in errors.take(_shownLines))
         l10n.importRowLine(e.row, l10n.csvError(e.code)),
@@ -215,14 +259,19 @@ class _ImportWorkersDialogState extends State<ImportWorkersDialog> {
         l10n.importDuplicateLine(d.row, d.workerId),
       if (duplicates.length > _shownLines)
         l10n.importMore(duplicates.length - _shownLines),
+      for (final r in repeats.take(_shownLines))
+        l10n.importRepeatLine(r.row, r.firstRow),
+      if (repeats.length > _shownLines)
+        l10n.importMore(repeats.length - _shownLines),
     ];
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('${l10n.validRows}: ${_preview.valid}'),
+        Text('${l10n.validRows}: $_validCount'),
         Text('${l10n.invalidRows}: ${errors.length}'),
-        Text('${l10n.duplicateRows}: ${duplicates.length}'),
+        Text('${l10n.duplicateRows}: ${duplicates.length + repeats.length}'),
+        ..._ignoredNotice(l10n),
         if (lines.isNotEmpty) ...[
           const SizedBox(height: 8),
           Flexible(
@@ -239,7 +288,7 @@ class _ImportWorkersDialogState extends State<ImportWorkersDialog> {
             ),
           ),
         ],
-        if (duplicates.isNotEmpty)
+        if (duplicates.isNotEmpty || repeats.isNotEmpty)
           CheckboxListTile(
             contentPadding: EdgeInsets.zero,
             value: _includeDuplicates,
@@ -274,8 +323,8 @@ class _ImportWorkersDialogState extends State<ImportWorkersDialog> {
         return const [];
       case _Phase.preview:
         final canImport =
-            _preview.valid > 0 ||
-            (_includeDuplicates && _preview.duplicates.isNotEmpty);
+            _validCount > 0 ||
+            (_includeDuplicates && _confirmedRows.isNotEmpty);
         return [
           TextButton(
             onPressed: () => Navigator.pop(context, false),

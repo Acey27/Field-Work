@@ -3,33 +3,63 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/l10n/app_localizations.dart';
 import '../../../shared/widgets/language_toggle.dart';
+import '../../../shared/widgets/refresh_button.dart';
 import '../data/field_service.dart';
 
 class FieldsPage extends StatefulWidget {
-  const FieldsPage({required this.onLocaleChanged, super.key});
+  const FieldsPage({required this.onLocaleChanged, this.service, super.key});
 
   final ValueChanged<Locale> onLocaleChanged;
+
+  /// Only tests pass one; the app talks to Supabase.
+  final FieldService? service;
 
   @override
   State<FieldsPage> createState() => _FieldsPageState();
 }
 
 class _FieldsPageState extends State<FieldsPage> {
-  final _service = FieldService();
-  late Future<List<Map<String, dynamic>>> _fields;
+  late final FieldService _service = widget.service ?? FieldService();
+  List<Map<String, dynamic>>? _fields;
+  bool _loadFailed = false;
   String _query = '';
 
   @override
   void initState() {
     super.initState();
-    _fields = _service.listFields();
+    _load();
   }
 
-  void _refresh() => setState(() => _fields = _service.listFields());
+  /// Loads the list from the server. The list on screen is replaced only when
+  /// the new one arrives, so a save never blanks the page.
+  /// [report] tells the admin when a refresh they asked for failed.
+  Future<void> _load({bool report = false}) async {
+    try {
+      final fields = await _service.listFields();
+      if (mounted) {
+        setState(() {
+          _fields = fields;
+          _loadFailed = false;
+        });
+      }
+    } on Object catch (error) {
+      debugPrint('Could not load the fields: $error');
+      if (!mounted) return;
+      if (_fields == null) {
+        setState(() => _loadFailed = true);
+      } else if (report) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context).adminLoadError)),
+        );
+      }
+    }
+  }
 
-  Future<void> _reloadAfterMutation() async {
-    final fields = await _service.listFields();
-    if (mounted) setState(() => _fields = Future.value(fields));
+  Future<void> _refresh() => _load(report: true);
+
+  void _retry() {
+    setState(() => _loadFailed = false);
+    _load();
   }
 
   @override
@@ -39,7 +69,7 @@ class _FieldsPageState extends State<FieldsPage> {
       appBar: AppBar(
         title: Text(l10n.fields),
         actions: [
-          IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
+          RefreshButton(tooltip: l10n.refresh, onRefresh: _refresh),
           LanguageToggle(onChanged: widget.onLocaleChanged),
         ],
       ),
@@ -48,56 +78,55 @@ class _FieldsPageState extends State<FieldsPage> {
         icon: const Icon(Icons.add_location_alt),
         label: Text(l10n.addField),
       ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _fields,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: FilledButton(onPressed: _refresh, child: Text(l10n.retry)),
-            );
-          }
-          final rows = snapshot.data!.where((row) {
-            final query = _query.toLowerCase();
-            return query.isEmpty ||
-                '${row['name']} ${row['location'] ?? ''} ${row['address'] ?? ''}'
-                    .toLowerCase()
-                    .contains(query);
-          }).toList();
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: TextField(
-                  decoration: InputDecoration(
-                    labelText: l10n.searchFields,
-                    prefixIcon: const Icon(Icons.search),
-                  ),
-                  onChanged: (value) => setState(() => _query = value),
+      body: _body(l10n),
+    );
+  }
+
+  Widget _body(AppLocalizations l10n) {
+    final all = _fields;
+    if (all == null) {
+      return _loadFailed
+          ? Center(
+              child: FilledButton(onPressed: _retry, child: Text(l10n.retry)),
+            )
+          : const Center(child: CircularProgressIndicator());
+    }
+    final rows = all.where((row) {
+      final query = _query.toLowerCase();
+      return query.isEmpty ||
+          '${row['name']} ${row['location'] ?? ''} ${row['address'] ?? ''}'
+              .toLowerCase()
+              .contains(query);
+    }).toList();
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            decoration: InputDecoration(
+              labelText: l10n.searchFields,
+              prefixIcon: const Icon(Icons.search),
+            ),
+            onChanged: (value) => setState(() => _query = value),
+          ),
+        ),
+        Expanded(
+          child: rows.isEmpty
+              ? Center(child: Text(l10n.noFields))
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: rows.length,
+                  itemBuilder: (context, index) {
+                    final row = rows[index];
+                    return _FieldTile(
+                      row: row,
+                      onToggle: () => _toggle(row),
+                      onEdit: () => _showCreate(row),
+                    );
+                  },
                 ),
-              ),
-              Expanded(
-                child: rows.isEmpty
-                    ? Center(child: Text(l10n.noFields))
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: rows.length,
-                        itemBuilder: (context, index) {
-                          final row = rows[index];
-                          return _FieldTile(
-                            row: row,
-                            onToggle: () => _toggle(row),
-                            onEdit: () => _showCreate(row),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          );
-        },
-      ),
+        ),
+      ],
     );
   }
 
@@ -168,27 +197,22 @@ class _FieldsPageState extends State<FieldsPage> {
     name.dispose();
     location.dispose();
     address.dispose();
-    if (result == true) {
-      try {
-        await _reloadAfterMutation();
-      } on Object catch (error) {
-        if (mounted) _showOperationError(error);
-      }
-    }
+    if (result == true) await _load();
   }
 
   Future<void> _toggle(Map<String, dynamic> row) async {
     final active = row['active'] != true;
     try {
       await _service.setActive(fieldId: row['id'] as String, active: active);
-      if (mounted) setState(() => row['active'] = active);
-      await _reloadAfterMutation();
     } on Object catch (error) {
       if (mounted) _showOperationError(error);
     }
+    // Show what the server has now, whether or not the call reported an error.
+    await _load();
   }
 
   void _showOperationError(Object error) {
+    debugPrint('Field action failed: $error');
     final l10n = AppLocalizations.of(context);
     final code = switch (error) {
       AuthException(:final message) => message,

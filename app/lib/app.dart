@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/l10n/app_localizations.dart';
 import 'core/router/app_router.dart';
+import 'core/supabase/supabase_client.dart';
 import 'core/theme/app_theme.dart';
 
 class AttendanceApp extends StatefulWidget {
@@ -18,11 +22,28 @@ class AttendanceApp extends StatefulWidget {
 class _AttendanceAppState extends State<AttendanceApp> {
   late Locale _locale = widget.initialLocale;
   late final GoRouter _router;
+  StreamSubscription<AuthState>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
     _router = buildRouter(_setLocale);
+    if (SupabaseConfig.isConfigured) {
+      // Whatever ended the session (log out, a renewal that failed, a phone
+      // turned off by the admin), every screen goes back to the login page.
+      _authSubscription = Supabase.instance.client.auth.onAuthStateChange
+          .listen((state) {
+            if (state.event == AuthChangeEvent.signedOut) {
+              _router.go('/login');
+            }
+          });
+    }
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
   }
 
   void _setLocale(Locale locale) {

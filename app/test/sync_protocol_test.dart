@@ -21,6 +21,7 @@ void main() {
       'blocked_inactive_field',
       'blocked_inactive_technician',
       'blocked_not_assigned',
+      'blocked_held_elsewhere',
     ]) {
       expect(
         scanUploadState(result),

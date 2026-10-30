@@ -1,5 +1,5 @@
 -- Phase 4 admin checks. Run the WHOLE script in the Supabase SQL editor of the
--- DEV project, after migrations 012 to 017 are applied.
+-- DEV project, after migrations 012 to 018 are applied.
 --
 -- It pretends to be an admin (and a technician) by setting the sign-in claims
 -- inside one transaction, creates its own test fields and workers, and ends
@@ -190,6 +190,58 @@ begin
     'the manual End field day is in the audit log');
 end $$;
 
+-- ------------- 2b. a field day from an earlier date that was never ended
+-- The tile "Field days not ended" counts it, so the dashboard list (called
+-- without a date) must show it too, and ending it clears both (migration 020).
+do $$
+declare
+  admin uuid := pg_temp.fx('admin')::uuid;
+  tech uuid := pg_temp.fx('tech')::uuid;
+  fld uuid := pg_temp.fx('field_b')::uuid;
+  y date := public.ph_today() - 3;
+  fd uuid;
+  before_count int;
+  after_count int;
+  row_json jsonb;
+begin
+  perform pg_temp.as_user(admin);
+  before_count := (public.get_stats_today()->>'field_days_not_ended')::int;
+
+  insert into public.field_days (technician_id, field_id, work_date, status)
+  values (tech, fld, y, 'working')
+  on conflict (technician_id, work_date) do update
+    set status = 'working', ended_at = null, field_id = excluded.field_id
+  returning id into fd;
+
+  after_count := (public.get_stats_today()->>'field_days_not_ended')::int;
+  -- It may already have been counted if the technician had an unended day then.
+  perform pg_temp.ensure(after_count >= before_count and after_count >= 1,
+    'an unended earlier day counts in field_days_not_ended');
+
+  select r into row_json from jsonb_array_elements(public.get_today_field_days()) r
+   where r->>'field_day_id' = fd::text;
+  perform pg_temp.ensure(row_json is not null,
+    'the dashboard list shows the unended earlier day');
+  perform pg_temp.ensure(row_json->>'status' = 'not_ended'
+    and row_json->>'work_date' = y::text, 'it is not_ended with its own date');
+
+  -- Asking for a specific date still returns only that date.
+  perform pg_temp.ensure(
+    not exists (select 1 from jsonb_array_elements(
+                  public.get_today_field_days(public.ph_today())) r
+                 where r->>'field_day_id' = fd::text),
+    'a dated request does not include other days');
+
+  perform public.admin_end_field_day(tech, y, pg_temp.ph(y, '17:00'), 'test end');
+  select r into row_json from jsonb_array_elements(public.get_today_field_days()) r
+   where r->>'field_day_id' = fd::text;
+  perform pg_temp.ensure(row_json is null,
+    'an ended earlier day is no longer in the dashboard list');
+  perform pg_temp.ensure(
+    (public.get_stats_today()->>'field_days_not_ended')::int = after_count - 1,
+    'ending it lowers field_days_not_ended by one');
+end $$;
+
 -- --------------------------------- 3. manual time records and their fixes
 do $$
 declare
@@ -311,6 +363,25 @@ begin
     format('select public.admin_update_field(%L, %L)', gen_random_uuid(), 'x'),
     'E_FIELD_NOT_FOUND');
 
+  -- The field functions return jsonb (migration 018).
+  result := public.admin_create_field('  ZZ Created Field ', 'Echague', null);
+  perform pg_temp.ensure(
+    jsonb_typeof(result) = 'object' and result->>'name' = 'ZZ Created Field'
+    and (result->>'active')::boolean, 'a field can be added and comes back as jsonb');
+  perform pg_temp.expect_error(
+    $q$select public.admin_create_field('   ')$q$, 'E_FIELD_NAME_MISSING');
+  result := public.admin_set_field_active((result->>'id')::uuid, false);
+  perform pg_temp.ensure(not (result->>'active')::boolean, 'a field can be turned off');
+  result := public.admin_set_field_active((result->>'id')::uuid, true);
+  perform pg_temp.ensure((result->>'active')::boolean, 'a field can be turned on again');
+  perform pg_temp.expect_error(
+    format('select public.admin_set_field_active(%L, false)', gen_random_uuid()),
+    'E_FIELD_NOT_FOUND');
+  perform pg_temp.ensure(
+    exists (select 1 from public.audit_logs
+             where action = 'field_created' and after->>'name' = 'ZZ Created Field'),
+    'adding a field is in the audit log');
+
   result := public.admin_assign_field(tech, field_a);
   perform pg_temp.ensure((result->>'changed')::boolean, 'first assignment changes');
   result := public.admin_assign_field(tech, field_b);
@@ -361,7 +432,7 @@ begin
   perform pg_temp.as_user(admin);
   select jsonb_agg(jsonb_build_object(
            'row', i + 1, 'name', 'ZZ Import ' || i, 'cp_no', '0917' || i,
-           'address', 'Echague', 'gender', 'male', 'date_of_birth', '1990-01-01')
+           'address', 'Echague')
          order by i)
     into all_rows from generate_series(1, 2000) i;
 
@@ -391,7 +462,7 @@ begin
     (select count(*) from public.workers where name like 'ZZ Import %') = 2000,
     '2,000 workers exist');
 
-  -- The same file again: every row is a possible duplicate (name + birth date).
+  -- The same file again: every row is a possible duplicate (the same name).
   for c in 0..3 loop
     select jsonb_agg(e order by n) into chunk
       from jsonb_array_elements(all_rows) with ordinality t(e, n)
@@ -406,22 +477,28 @@ begin
     jsonb_build_array(all_rows->0 || '{"allow_duplicate": true}'::jsonb), true);
   perform pg_temp.ensure((res->>'inserted')::int = 1, 'a confirmed duplicate is inserted');
 
-  -- Bad rows get a code and never stop the others.
+  -- Bad rows get a code and never stop the others. Gender and date of birth
+  -- are not used any more (migration 018), so a leftover value is just ignored.
+  -- A repeated name is a duplicate whatever its case or spaces.
   bad := jsonb_build_array(
-    jsonb_build_object('row', 2, 'name', '', 'date_of_birth', '1990-01-01'),
-    jsonb_build_object('row', 3, 'name', 'ZZ Bad A', 'date_of_birth', 'not a date'),
-    jsonb_build_object('row', 4, 'name', 'ZZ Bad B', 'date_of_birth', '2000-13-45'),
-    jsonb_build_object('row', 5, 'name', 'ZZ Bad C', 'gender', 'robot'),
-    jsonb_build_object('row', 6, 'name', repeat('x', 300)),
-    jsonb_build_object('row', 7, 'name', 'ZZ Good Row', 'date_of_birth', '1991-02-03'));
+    jsonb_build_object('row', 2, 'name', ''),
+    jsonb_build_object('row', 3, 'name', '  zz IMPORT 5 '),
+    jsonb_build_object('row', 4, 'name', repeat('x', 300)),
+    jsonb_build_object('row', 5, 'name', 'ZZ Good Row'),
+    jsonb_build_object('row', 6, 'name', 'ZZ Ignored Extras',
+                       'gender', 'robot', 'date_of_birth', 'not a date'));
   res := public.import_workers(bad, false);
   select array_agg(e->>'code' order by (e->>'row')::int)
     into codes from jsonb_array_elements(res->'errors') e;
   perform pg_temp.ensure(
-    codes = array['E_CSV_NAME_MISSING', 'E_CSV_DOB_INVALID', 'E_CSV_DOB_INVALID',
-                  'E_CSV_GENDER_INVALID', 'E_CSV_ROW_TOO_LONG'],
+    codes = array['E_CSV_NAME_MISSING', 'E_CSV_ROW_TOO_LONG'],
     'each bad row has its own error code, got ' || coalesce(codes::text, 'none'));
-  perform pg_temp.ensure((res->>'valid')::int = 1, 'the good row is still valid');
+  perform pg_temp.ensure(
+    jsonb_array_length(res->'duplicates') = 1
+    and (res->'duplicates'->0->>'row')::int = 3,
+    'a name that differs only by case and spaces is a duplicate');
+  perform pg_temp.ensure((res->>'valid')::int = 2,
+    'the good rows are still valid, and gender / date of birth are ignored');
 end $$;
 
 -- ------------------- 6. statistics, flagged list, paper sheet, settings
@@ -461,6 +538,16 @@ begin
   perform pg_temp.ensure(
     sheet->'technician'->>'id' = tech::text and jsonb_typeof(sheet->'workers') = 'array',
     'the paper sheet has the technician and a workers list');
+  -- Worker 1 only has time records with this technician (sections 2 and 3
+  -- wrote them without a scan), so only the records can list them (018).
+  perform pg_temp.ensure(
+    exists (select 1 from jsonb_array_elements(sheet->'workers') x
+             where x->>'id' = pg_temp.fx('w1')),
+    'the paper sheet lists a worker who only has a time record');
+  perform pg_temp.ensure(
+    not exists (select 1 from jsonb_array_elements(sheet->'workers') x
+                 where x->>'time_in' is not null or x->>'time_out' is not null),
+    'the paper sheet leaves the time boxes to be written by hand');
   perform pg_temp.expect_error(
     format('select public.get_paper_sheet(%L)', gen_random_uuid()), 'E_FIELD_DAY_NOT_FOUND');
 
@@ -472,6 +559,72 @@ begin
   perform pg_temp.expect_error(
     $q$select public.admin_set_setting('reminder_time', '"99:99"'::jsonb)$q$,
     'E_SETTING_INVALID');
+end $$;
+
+-- ------------------------------------ 7. the safety-net notice (018)
+-- ingest_scans closes the first technician's session with closed_by =
+-- 'safety_net' when a second technician scans the worker. That close tells the
+-- first technician (type worker_clocked_out). Their own scan tells nobody.
+do $$
+declare
+  tech uuid := pg_temp.fx('tech')::uuid;
+  fld uuid := pg_temp.fx('field_a')::uuid;
+  today date := public.ph_today();
+  w3 text;
+  fd uuid;
+  s1 uuid;
+  s2 uuid;
+  before_count int;
+  note record;
+begin
+  select id into fd from public.field_days
+   where technician_id = tech and work_date = today;
+  insert into public.workers (name, qr_check) values ('ZZ Test Worker 3', 'abc')
+    returning id into w3;
+  select count(*) into before_count from public.notifications
+   where recipient_id = tech and type = 'worker_clocked_out';
+
+  insert into public.attendance_sessions
+    (worker_id, technician_id, field_id, field_day_id, work_date, time_in)
+  values (w3, tech, fld, fd, today, date_trunc('minute', now()) - interval '20 minutes')
+  returning id into s1;
+  update public.attendance_sessions
+     set time_out = date_trunc('minute', now()) - interval '15 minutes', closed_by = 'scan'
+   where id = s1;
+  perform pg_temp.ensure(
+    (select count(*) from public.notifications
+      where recipient_id = tech and type = 'worker_clocked_out') = before_count,
+    'a technician''s own scan sends no notice');
+
+  insert into public.attendance_sessions
+    (worker_id, technician_id, field_id, field_day_id, work_date, time_in)
+  values (w3, tech, fld, fd, today, date_trunc('minute', now()) - interval '10 minutes')
+  returning id into s2;
+  update public.attendance_sessions
+     set time_out = date_trunc('minute', now()) - interval '5 minutes',
+         closed_by = 'safety_net'
+   where id = s2;
+
+  perform pg_temp.ensure(
+    (select count(*) from public.notifications
+      where recipient_id = tech and type = 'worker_clocked_out') = before_count + 1,
+    'a safety-net close sends exactly one notice to the first technician');
+  select * into note from public.notifications
+   where recipient_id = tech and type = 'worker_clocked_out'
+   order by created_at desc, id limit 1;
+  perform pg_temp.ensure(
+    note.params->>'worker_id' = w3 and note.params->>'worker_name' = 'ZZ Test Worker 3'
+    and note.params->>'reason' = 'safety_net' and note.read_at is null,
+    'the notice holds data only: worker, reason, unread');
+
+  -- A later fix of the same record does not send it again.
+  update public.attendance_sessions
+     set time_out = date_trunc('minute', now()) - interval '4 minutes'
+   where id = s2;
+  perform pg_temp.ensure(
+    (select count(*) from public.notifications
+      where recipient_id = tech and type = 'worker_clocked_out') = before_count + 1,
+    'fixing the time later sends no second notice');
 end $$;
 
 select 'admin.sql: all checks passed' as result;

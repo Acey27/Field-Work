@@ -4,6 +4,14 @@ const repeatScanWindow = Duration(seconds: 30);
 
 enum LocalDirection { clockIn, clockOut }
 
+/// Scans of a worker up to this moment no longer count for clock in or out,
+/// because another technician took the worker over at [takenOverAt]
+/// (CONTRACT.md section 4.6, rule 6). The server stores that moment to the
+/// minute, which can be up to a minute before this phone's own last scan, so
+/// scans in that minute count as before the takeover.
+DateTime takeoverCutoff(DateTime takenOverAt) =>
+    takenOverAt.toUtc().add(const Duration(minutes: 1));
+
 /// What a scan means, from the phone's own scans of the worker today.
 ///
 /// The server decides for real (CONTRACT.md section 6); this only drives the

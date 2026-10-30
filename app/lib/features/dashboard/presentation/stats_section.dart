@@ -2,14 +2,21 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/app_localizations.dart';
 import '../../../core/utils/ph_time.dart';
+import '../../../core/utils/refresh_group.dart';
 import '../data/admin_service.dart';
 import '../domain/admin_stats.dart';
 
 /// Statistics with a Daily / Weekly filter (SPEC.md section 11).
 class StatsSection extends StatefulWidget {
-  const StatsSection({required this.service, super.key});
+  const StatsSection({required this.service, this.refresh, super.key});
 
   final AdminService service;
+
+  /// The dashboard runs this every few seconds and when the admin taps
+  /// refresh. The numbers are fetched again without losing the Daily / Weekly
+  /// choice or the week being looked at, and a failed fetch keeps the numbers
+  /// already on screen.
+  final RefreshGroup? refresh;
 
   @override
   State<StatsSection> createState() => _StatsSectionState();
@@ -18,22 +25,88 @@ class StatsSection extends StatefulWidget {
 class _StatsSectionState extends State<StatsSection> {
   bool _weekly = false;
   late DateTime _weekStart;
-  late Future<TodayStats> _today;
-  late Future<WeekStats> _week;
+  TodayStats? _today;
+  bool _todayFailed = false;
+  WeekStats? _week;
+  bool _weekFailed = false;
+
+  /// Only the newest week request may fill the screen (the arrows can be
+  /// tapped faster than the server answers).
+  int _weekRequest = 0;
 
   @override
   void initState() {
     super.initState();
     _weekStart = phWeekStart(phDateOf(DateTime.now()));
-    _today = widget.service.statsToday();
-    _week = widget.service.statsWeek(_weekStart);
+    widget.refresh?.add(_reload);
+    _loadToday();
+  }
+
+  @override
+  void didUpdateWidget(StatsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refresh != widget.refresh) {
+      oldWidget.refresh?.remove(_reload);
+      widget.refresh?.add(_reload);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.refresh?.remove(_reload);
+    super.dispose();
+  }
+
+  Future<void> _reload() =>
+      Future.wait([_loadToday(), if (_weekly) _loadWeek()]);
+
+  Future<void> _loadToday() async {
+    try {
+      final stats = await widget.service.statsToday();
+      if (mounted) {
+        setState(() {
+          _today = stats;
+          _todayFailed = false;
+        });
+      }
+    } on Object {
+      if (mounted && _today == null) setState(() => _todayFailed = true);
+    }
+  }
+
+  /// [clear] forgets the week on screen first (the admin moved to another
+  /// week); without it the old numbers stay until the new ones arrive.
+  Future<void> _loadWeek({bool clear = false}) async {
+    final request = ++_weekRequest;
+    if (clear) {
+      setState(() {
+        _week = null;
+        _weekFailed = false;
+      });
+    }
+    try {
+      final stats = await widget.service.statsWeek(_weekStart);
+      if (mounted && request == _weekRequest) {
+        setState(() {
+          _week = stats;
+          _weekFailed = false;
+        });
+      }
+    } on Object {
+      if (mounted && request == _weekRequest && _week == null) {
+        setState(() => _weekFailed = true);
+      }
+    }
   }
 
   void _moveWeek(int weeks) {
-    setState(() {
-      _weekStart = _weekStart.add(Duration(days: 7 * weeks));
-      _week = widget.service.statsWeek(_weekStart);
-    });
+    setState(() => _weekStart = _weekStart.add(Duration(days: 7 * weeks)));
+    _loadWeek(clear: true);
+  }
+
+  void _showWeekly(bool weekly) {
+    setState(() => _weekly = weekly);
+    if (weekly) _loadWeek();
   }
 
   @override
@@ -48,7 +121,7 @@ class _StatsSectionState extends State<StatsSection> {
             ButtonSegment(value: true, label: Text(l10n.weekly)),
           ],
           selected: {_weekly},
-          onSelectionChanged: (value) => setState(() => _weekly = value.first),
+          onSelectionChanged: (value) => _showWeekly(value.first),
         ),
         const SizedBox(height: 12),
         if (_weekly) _weekView(l10n) else _todayView(l10n),
@@ -57,49 +130,34 @@ class _StatsSectionState extends State<StatsSection> {
   }
 
   Widget _todayView(AppLocalizations l10n) {
-    return FutureBuilder<TodayStats>(
-      future: _today,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) return Text(l10n.adminLoadError);
-        final stats = snapshot.data;
-        if (stats == null) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final cards = [
-          (l10n.clockedInNow, stats.clockedInNow, Icons.groups, false),
-          (l10n.finishedWorkers, stats.finished, Icons.task_alt, false),
-          (
-            l10n.techniciansWorking,
-            stats.techniciansWorking,
-            Icons.badge,
-            false,
+    final stats = _today;
+    if (stats == null) {
+      return _todayFailed
+          ? Text(l10n.adminLoadError)
+          : const Center(child: CircularProgressIndicator());
+    }
+    final cards = [
+      (l10n.clockedInNow, stats.clockedInNow, Icons.groups, false),
+      (l10n.finishedWorkers, stats.finished, Icons.task_alt, false),
+      (l10n.techniciansWorking, stats.techniciansWorking, Icons.badge, false),
+      (l10n.fieldsWorking, stats.fieldsWorking, Icons.landscape, false),
+      (
+        l10n.fieldDaysNotEnded,
+        stats.fieldDaysNotEnded,
+        Icons.warning_amber,
+        stats.fieldDaysNotEnded > 0,
+      ),
+    ];
+    return StatGrid(
+      children: [
+        for (final card in cards)
+          StatCard(
+            label: card.$1,
+            value: '${card.$2}',
+            icon: card.$3,
+            attention: card.$4,
           ),
-          (l10n.fieldsWorking, stats.fieldsWorking, Icons.landscape, false),
-          (
-            l10n.fieldDaysNotEnded,
-            stats.fieldDaysNotEnded,
-            Icons.warning_amber,
-            stats.fieldDaysNotEnded > 0,
-          ),
-        ];
-        return GridView.count(
-          crossAxisCount: MediaQuery.sizeOf(context).width > 700 ? 5 : 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 1.4,
-          children: [
-            for (final card in cards)
-              StatCard(
-                label: card.$1,
-                value: '${card.$2}',
-                icon: card.$3,
-                attention: card.$4,
-              ),
-          ],
-        );
-      },
+      ],
     );
   }
 
@@ -129,47 +187,36 @@ class _StatsSectionState extends State<StatsSection> {
             ),
           ],
         ),
-        FutureBuilder<WeekStats>(
-          future: _week,
-          builder: (context, snapshot) {
-            if (snapshot.hasError) return Text(l10n.adminLoadError);
-            final stats = snapshot.data;
-            if (stats == null) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            return _weekDetails(l10n, stats);
-          },
-        ),
+        if (_week != null)
+          _weekDetails(l10n, _week!)
+        else if (_weekFailed)
+          Text(l10n.adminLoadError)
+        else
+          const Center(child: CircularProgressIndicator()),
       ],
     );
   }
 
   Widget _weekDetails(AppLocalizations l10n, WeekStats stats) {
     final material = MaterialLocalizations.of(context);
-    String dayLabel(DateTime date) =>
-        material.narrowWeekdays[date.weekday % 7];
+    String dayLabel(DateTime date) => material.narrowWeekdays[date.weekday % 7];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        StatGrid(
           children: [
-            Expanded(
-              child: StatCard(
-                label: l10n.thisWeek,
-                value: l10n.durationShort(stats.totalMinutes),
-                caption: '${l10n.workersWeekTotal}: ${stats.workersPresent}',
-                icon: Icons.calendar_view_week,
-              ),
+            StatCard(
+              label: l10n.thisWeek,
+              value: l10n.durationShort(stats.totalMinutes),
+              caption: '${l10n.workersWeekTotal}: ${stats.workersPresent}',
+              icon: Icons.calendar_view_week,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: StatCard(
-                label: l10n.lastWeek,
-                value: l10n.durationShort(stats.previousTotalMinutes),
-                caption:
-                    '${l10n.workersWeekTotal}: ${stats.previousWorkersPresent}',
-                icon: Icons.history,
-              ),
+            StatCard(
+              label: l10n.lastWeek,
+              value: l10n.durationShort(stats.previousTotalMinutes),
+              caption:
+                  '${l10n.workersWeekTotal}: ${stats.previousWorkersPresent}',
+              icon: Icons.history,
             ),
           ],
         ),
@@ -227,6 +274,55 @@ class _StatsSectionState extends State<StatsSection> {
   }
 }
 
+/// Cards in rows of equal width. Each row is as tall as its tallest card, so a
+/// label that wraps to three lines (a narrow window, large text, Filipino)
+/// never overflows; a fixed tile height cannot promise that.
+class StatGrid extends StatelessWidget {
+  const StatGrid({required this.children, super.key});
+
+  final List<Widget> children;
+
+  static const _spacing = 12.0;
+
+  /// A card is never narrower than this, so its label has room to wrap.
+  static const _minCardWidth = 150.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns =
+            ((constraints.maxWidth + _spacing) / (_minCardWidth + _spacing))
+                .floor()
+                .clamp(1, children.length);
+        return Column(
+          children: [
+            for (var start = 0; start < children.length; start += columns)
+              Padding(
+                padding: EdgeInsets.only(top: start == 0 ? 0 : _spacing),
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = 0; i < columns; i++) ...[
+                        if (i > 0) const SizedBox(width: _spacing),
+                        Expanded(
+                          child: start + i < children.length
+                              ? children[start + i]
+                              : const SizedBox.shrink(),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 /// A big number with a label (SPEC.md section 14: big numbers).
 class StatCard extends StatelessWidget {
   const StatCard({
@@ -253,11 +349,14 @@ class StatCard extends StatelessWidget {
       color: attention ? colors.secondaryContainer : null,
       child: Padding(
         padding: const EdgeInsets.all(14),
+        // No Spacer: the dashboard scrolls, so a card can get unbounded
+        // height, and a Spacer there cannot be laid out (a blank page).
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(icon, color: attention ? colors.secondary : null),
-            const Spacer(),
+            const SizedBox(height: 12),
             Text(value, style: Theme.of(context).textTheme.headlineSmall),
             Text(label),
             if (caption != null)
@@ -270,7 +369,11 @@ class StatCard extends StatelessWidget {
 }
 
 class BarValue {
-  const BarValue({required this.label, required this.value, required this.text});
+  const BarValue({
+    required this.label,
+    required this.value,
+    required this.text,
+  });
   final String label;
   final int value;
   final String text;
@@ -286,7 +389,10 @@ class BarChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxValue = bars.fold<int>(0, (max, bar) => bar.value > max ? bar.value : max);
+    final maxValue = bars.fold<int>(
+      0,
+      (max, bar) => bar.value > max ? bar.value : max,
+    );
     final color = Theme.of(context).colorScheme.primary;
     // The bar area takes whatever height is left after the two text lines,
     // so large text sizes never overflow.

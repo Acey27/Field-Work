@@ -32,7 +32,7 @@ Workers never use the app. If a worker wants to know their status, they ask a te
 Admins can add people in two ways:
 
 * **Manual entry** through a simple form.  
-* **CSV upload** with these columns: name, cp\_no, address, gender, date\_of\_birth.
+* **CSV upload** with these columns: name, cp\_no, address. Gender and date of birth are not used (decided 2026-10-30). A column the system does not read is listed in the preview, for example: Column 'cp number' was not used.
 
 After saving, the system automatically:
 
@@ -43,8 +43,8 @@ After saving, the system automatically:
 ### **CSV upload rules**
 
 * Show a preview before saving.  
-* Reject bad rows with a clear message, for example: Row 12: date of birth is not valid. One bad row does not stop the whole upload.  
-* Warn about possible duplicates (same name and date of birth).
+* Reject bad rows with a clear message, for example: Row 12: The name is missing. One bad row does not stop the whole upload.  
+* Warn about possible duplicates: the same name (ignoring capital letters and spaces at the ends) as a worker who is already saved, or as an earlier row of the same file. The admin can tick a box to add them anyway.
 
 ### **Accounts for technicians**
 
@@ -92,7 +92,8 @@ A worker may work in more than one field on the same date.
 * Each in-and-out pair is saved as a **session** with its field and technician.  
 * The worker's hours for the date are the total of all sessions.  
 * The worker counts as present once for that date.  
-* Ideally the worker is clocked out at the same field where they clocked in. As a **safety net**, if a second technician scans a worker who is still clocked in under the first technician, the system automatically closes the first session at that moment, so the hours are never counted twice.
+* Ideally the worker is clocked out at the same field where they clocked in. As a **safety net**, if a second technician scans a worker who is still clocked in under the first technician, the system automatically closes the first session at that moment, so the hours are never counted twice. The first technician is told on their phone: Worker clocked out: Juan (scanned by another technician).  
+* **This happens once.** After a second technician has taken a worker over, only that technician can clock the worker out. If the first technician scans the worker again, the scan is refused with a message ("Another technician has this worker clocked in. Only that technician can clock them out.") and nothing changes. When the second technician clocks the worker out (or ends their field day, or the admin fixes the record), any technician can clock the worker in again (decided 2026-10-30).
 
 ## **7\. End field day**
 
@@ -119,6 +120,7 @@ The admin's main check is one screen:
 * **Working:** the technician is in the field.  
 * **Ended:** the technician tapped End field day.  
 * **Not ended:** it is past the reminder time and nobody ended it. This is the only status the admin needs to act on.  
+* A field day from an **earlier date** that was never ended stays on this screen as Not ended, with its date, until the admin ends it (it is also counted in the "Field days not ended" number), because its workers would otherwise stay clocked in.  
 * **Last sync** shows when each technician's phone last uploaded. A technician with no signal may look Not ended only because their scans have not arrived yet.
 
 ### **Reminder time**
@@ -126,6 +128,7 @@ The admin's main check is one screen:
 * The admin sets a **reminder time** in settings. The starting value is **5:00 PM**.  
 * At that time the system checks which technicians have not ended their field day and sends the admin a notification, for example: 2 technicians have not ended their field day: Mark Cruz (Field 3), Ana Reyes (Field 1).  
 * Tapping the notification opens this screen.  
+* The reminder only tells the admin. It never ends a field day by itself: the admin taps End field day (decided 2026-10-30).  
 * If a technician is still not ended after about 30 minutes, the admin gets one more reminder, then no more.  
 * The notification shows inside the app and website for free. A phone push notification (Firebase, also free) can be added after the first version works.  
 * The technician's app can show a gentle reminder at the same time: Are you leaving the field? Tap End field day. The admin can turn this off.
@@ -153,7 +156,7 @@ If a technician's phone dies or the app cannot be used, the technician may go ba
 To make the pen and paper fallback easy, the admin can print a sheet for one technician and one date from the website (a print page or PDF). Technicians keep a few copies in case their phone fails.
 
 * The header shows the technician's ID and name, the field, and the date.  
-* The usual workers of that technician are already listed with their ID and name. Blank rows are left for extra workers, who are written in by ID.  
+* The usual workers of that technician are already listed with their ID and name: the workers that technician scanned or had a time record for in the last 14 days. Blank rows are left for extra workers, who are written in by ID.  
 * Each row has two boxes: time in and time out.  
 * The text is large and follows the language toggle (English or Filipino).  
 * At the end of the day, the technician gives the sheet to the admin, who enters it through the manual time records above.  
@@ -292,7 +295,7 @@ Technician phone (Flutter, Any Platform)       Admin PC (Flutter Web, Any Platfo
 | Table | Purpose |
 | :---- | :---- |
 | profiles | Technicians and admins (linked to Supabase Auth), role, active flag |
-| workers | Worker records: ID, name, cp\_no, address, gender, date of birth, active flag |
+| workers | Worker records: ID, name, cp\_no, address, active flag (gender and date of birth are no longer used) |
 | fields | Field name, location, address, active flag, archived flag |
 | field\_assignments | Which technician works in which field |
 | scans | One row per scan: scan UUID, worker, technician, field, phone time, server time, location (if allowed), outside-hours flag |
@@ -347,7 +350,8 @@ No system can be completely hacker-proof. The goal is to make theft harder, limi
 * One person, one account. Accounts are never shared.  
 * Repeated wrong passwords are blocked. Failed logins are saved in the audit log, and the admin is notified after many failures.  
 * Admins and the Super Admin are notified when their account logs in from a new device.  
-* Website sessions expire after a period of no use.  
+* Website sessions expire after a period of no use. An expired session is renewed automatically when possible; otherwise the app returns to the login page.  
+* If an admin turns off a technician's account, or turns off their phone, the technician is **logged out automatically** within about 30 seconds of the phone being online, and cannot scan again until the admin turns it back on.  
 * Deleting many records or exporting all worker data notifies the Super Admin. Records are deactivated first so they can be recovered.
 
 #### **One phone per technician**

@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/l10n/app_localizations.dart';
 import '../../../core/utils/ph_time.dart';
 import '../../../shared/widgets/language_toggle.dart';
+import '../../../shared/widgets/refresh_button.dart';
 import '../../technicians/data/technician_service.dart';
 import '../../workers/data/worker_service.dart';
 import '../data/time_records_service.dart';
@@ -12,33 +13,83 @@ import '../data/time_records_service.dart';
 /// The admin's day list of time records, with add and fix
 /// (SPEC.md section 8: "Adding or fixing time records by hand").
 class TimeRecordsPage extends StatefulWidget {
-  const TimeRecordsPage({required this.onLocaleChanged, super.key});
+  const TimeRecordsPage({
+    required this.onLocaleChanged,
+    this.service,
+    super.key,
+  });
 
   final ValueChanged<Locale> onLocaleChanged;
+
+  /// Only tests pass one; the app talks to Supabase.
+  final TimeRecordsService? service;
 
   @override
   State<TimeRecordsPage> createState() => _TimeRecordsPageState();
 }
 
 class _TimeRecordsPageState extends State<TimeRecordsPage> {
-  final _service = TimeRecordsService();
+  late final TimeRecordsService _service =
+      widget.service ?? TimeRecordsService();
   late DateTime _date;
-  late Future<List<TimeRecord>> _records;
+  List<TimeRecord>? _records;
+  bool _loadFailed = false;
+
+  /// Only the newest request may fill the list (the date can change faster
+  /// than the server answers).
+  int _request = 0;
 
   @override
   void initState() {
     super.initState();
     _date = phDateOf(DateTime.now());
-    _records = _service.forDate(_date);
+    _load();
   }
 
-  void _refresh() => setState(() => _records = _service.forDate(_date));
+  // The setState callbacks in this page have a block body on purpose. An arrow
+  // callback like `setState(() => _records = ...)` returns the Future, and in a
+  // debug build Flutter then throws before it rebuilds, so the list stayed as
+  // it was until the browser was reloaded.
+
+  /// Fetches the day's records. The list on screen is replaced only when the
+  /// new one arrives. [clear] forgets it first (another day was chosen);
+  /// [report] tells the admin when a refresh they asked for failed.
+  Future<void> _load({bool clear = false, bool report = false}) async {
+    final request = ++_request;
+    if (clear) {
+      setState(() {
+        _records = null;
+        _loadFailed = false;
+      });
+    }
+    try {
+      final records = await _service.forDate(_date);
+      if (mounted && request == _request) {
+        setState(() {
+          _records = records;
+          _loadFailed = false;
+        });
+      }
+    } on Object catch (error) {
+      debugPrint('Could not load the time records: $error');
+      if (!mounted || request != _request) return;
+      if (_records == null) {
+        setState(() => _loadFailed = true);
+      } else if (report) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context).adminLoadError)),
+        );
+      }
+    }
+  }
+
+  Future<void> _refresh() => _load(report: true);
 
   void _moveDay(int days) {
     setState(() {
       _date = _date.add(Duration(days: days));
-      _records = _service.forDate(_date);
     });
+    _load(clear: true);
   }
 
   Future<void> _pickDate() async {
@@ -51,8 +102,8 @@ class _TimeRecordsPageState extends State<TimeRecordsPage> {
     if (picked == null) return;
     setState(() {
       _date = DateTime.utc(picked.year, picked.month, picked.day);
-      _records = _service.forDate(_date);
     });
+    _load(clear: true);
   }
 
   Future<void> _add() async {
@@ -94,11 +145,7 @@ class _TimeRecordsPageState extends State<TimeRecordsPage> {
         title: Text(l10n.timeRecords),
         leading: BackButton(onPressed: () => context.go('/admin/tools')),
         actions: [
-          IconButton(
-            tooltip: l10n.refresh,
-            onPressed: _refresh,
-            icon: const Icon(Icons.refresh),
-          ),
+          RefreshButton(tooltip: l10n.refresh, onRefresh: _refresh),
           LanguageToggle(onChanged: widget.onLocaleChanged),
         ],
       ),
@@ -133,37 +180,38 @@ class _TimeRecordsPageState extends State<TimeRecordsPage> {
               ],
             ),
           ),
-          Expanded(
-            child: FutureBuilder<List<TimeRecord>>(
-              future: _records,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return Center(
-                    child: FilledButton(
-                      onPressed: _refresh,
-                      child: Text(l10n.retry),
-                    ),
-                  );
-                }
-                final records = snapshot.data!;
-                if (records.isEmpty) {
-                  return Center(child: Text(l10n.noTimeRecords));
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 96),
-                  itemCount: records.length,
-                  itemBuilder: (context, index) => _RecordTile(
-                    record: records[index],
-                    onTap: () => _fix(records[index]),
-                  ),
-                );
-              },
-            ),
-          ),
+          Expanded(child: _list(l10n)),
         ],
+      ),
+    );
+  }
+
+  Widget _list(AppLocalizations l10n) {
+    final records = _records;
+    if (records == null) {
+      return _loadFailed
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(l10n.adminLoadError, textAlign: TextAlign.center),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: () => _load(clear: true),
+                    child: Text(l10n.retry),
+                  ),
+                ],
+              ),
+            )
+          : const Center(child: CircularProgressIndicator());
+    }
+    if (records.isEmpty) return Center(child: Text(l10n.noTimeRecords));
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 96),
+      itemCount: records.length,
+      itemBuilder: (context, index) => _RecordTile(
+        record: records[index],
+        onTap: () => _fix(records[index]),
       ),
     );
   }
@@ -194,7 +242,10 @@ class _RecordTile extends StatelessWidget {
         ),
         isThreeLine: true,
         trailing: record.enteredByAdmin
-            ? Icon(Icons.edit_note, color: Theme.of(context).colorScheme.secondary)
+            ? Icon(
+                Icons.edit_note,
+                color: Theme.of(context).colorScheme.secondary,
+              )
             : const Icon(Icons.edit),
       ),
     );
@@ -386,7 +437,8 @@ class _TimeRecordDialogState extends State<_TimeRecordDialog> {
                       Text('${fixing.workerName} (${fixing.workerId})')
                     else ...[
                       Autocomplete<Map<String, dynamic>>(
-                        displayStringForOption: (w) => '${w['name']} (${w['id']})',
+                        displayStringForOption: (w) =>
+                            '${w['name']} (${w['id']})',
                         optionsBuilder: (value) {
                           final query = value.text.trim().toLowerCase();
                           if (query.isEmpty) return const Iterable.empty();
@@ -399,8 +451,8 @@ class _TimeRecordDialogState extends State<_TimeRecordDialog> {
                               .take(8);
                         },
                         onSelected: (w) => setState(() => _worker = w),
-                        fieldViewBuilder: (context, controller, focus, submit) =>
-                            TextField(
+                        fieldViewBuilder:
+                            (context, controller, focus, submit) => TextField(
                               controller: controller,
                               focusNode: focus,
                               decoration: InputDecoration(
@@ -414,9 +466,7 @@ class _TimeRecordDialogState extends State<_TimeRecordDialog> {
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
                         initialValue: _technicianId,
-                        decoration: InputDecoration(
-                          labelText: l10n.technician,
-                        ),
+                        decoration: InputDecoration(labelText: l10n.technician),
                         items: [
                           for (final t in _technicianRows)
                             DropdownMenuItem(

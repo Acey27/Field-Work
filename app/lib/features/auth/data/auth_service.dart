@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../../core/supabase/login_notice.dart';
 import '../../../core/supabase/supabase_client.dart';
 
 class AuthService {
@@ -48,6 +49,18 @@ class AuthService {
       throw const AuthException('E_LOGIN_STATE_FAILED');
     }
     return AuthState(role: role, mustChangePassword: mustChangePassword);
+  }
+
+  /// Ends the session on this device. Always clears it locally, even when the
+  /// server cannot be reached; [notice] is shown on the login page.
+  Future<void> signOut({String? notice}) async {
+    if (notice != null) loginNotice.value = notice;
+    if (!SupabaseConfig.isConfigured) return;
+    try {
+      await _client.auth.signOut(scope: SignOutScope.local);
+    } on Object catch (error) {
+      debugPrint('sign out failed: $error');
+    }
   }
 
   Future<void> completeFirstLogin(String newPassword) async {

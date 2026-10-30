@@ -26,6 +26,12 @@ ScanReadiness readinessFromCode(String? code) => switch (code) {
   _ => ScanReadiness.offline,
 };
 
+/// Whether the server's answer means the admin turned this technician or this
+/// phone off. The app then logs the technician out by itself instead of
+/// letting them keep scanning.
+bool endsSession(String? code) =>
+    code == 'E_ACCOUNT_DISABLED' || code == 'E_DEVICE_REVOKED';
+
 /// The `get_my_context` answer: ready only when both the profile and the
 /// current field are present. A missing field is `E_NO_ACTIVE_FIELD`.
 ScanReadiness readinessFromContext(Map<String, dynamic> response) {

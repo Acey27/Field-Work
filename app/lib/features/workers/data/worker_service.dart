@@ -9,7 +9,7 @@ class WorkerService {
     _requireConfigured();
     final rows = await _client
         .from('workers')
-        .select('id,name,cp_no,address,gender,date_of_birth,qr_check,active')
+        .select('id,name,cp_no,address,qr_check,active')
         .order('name');
     return rows.map((row) => Map<String, dynamic>.from(row)).toList();
   }
@@ -18,19 +18,11 @@ class WorkerService {
     required String name,
     String? cpNo,
     String? address,
-    String? gender,
-    DateTime? dateOfBirth,
   }) async {
     _requireConfigured();
     final value = await _client.rpc<Map<String, dynamic>>(
       'admin_create_worker',
-      params: {
-        'p_name': name,
-        'p_cp_no': cpNo,
-        'p_address': address,
-        'p_gender': gender,
-        'p_date_of_birth': dateOfBirth?.toIso8601String().substring(0, 10),
-      },
+      params: {'p_name': name, 'p_cp_no': cpNo, 'p_address': address},
     );
     return value;
   }
@@ -40,8 +32,6 @@ class WorkerService {
     required String name,
     String? cpNo,
     String? address,
-    String? gender,
-    DateTime? dateOfBirth,
   }) async {
     _requireConfigured();
     return _client.rpc<Map<String, dynamic>>(
@@ -51,8 +41,6 @@ class WorkerService {
         'p_name': name,
         'p_cp_no': cpNo,
         'p_address': address,
-        'p_gender': gender,
-        'p_date_of_birth': dateOfBirth?.toIso8601String().substring(0, 10),
       },
     );
   }

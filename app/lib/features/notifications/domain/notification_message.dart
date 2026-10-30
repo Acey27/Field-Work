@@ -22,6 +22,9 @@ String notificationText(
           : l10n.notifFieldDayNotEnded(technicians.length, names);
     case 'device_approval_needed':
       return l10n.notifDeviceApproval;
+    case 'worker_clocked_out':
+      final name = '${params['worker_name'] ?? params['worker_id'] ?? ''}';
+      return l10n.notifWorkerClockedOut(name, params['reason'] as String?);
     default:
       return l10n.notifGeneric;
   }

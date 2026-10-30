@@ -4,7 +4,7 @@ import 'package:csv/csv.dart';
 const maxImportChunk = 500;
 
 /// The columns of the worker CSV (SPEC.md section 3).
-const csvColumns = ['name', 'cp_no', 'address', 'gender', 'date_of_birth'];
+const csvColumns = ['name', 'cp_no', 'address'];
 
 enum CsvProblem {
   /// The file has no rows at all.
@@ -15,27 +15,41 @@ enum CsvProblem {
 }
 
 class CsvParseResult {
-  const CsvParseResult({this.rows = const [], this.problem});
+  const CsvParseResult({
+    this.rows = const [],
+    this.problem,
+    this.ignoredColumns = const [],
+  });
 
   /// Workers to send, each with its `row` number (the header is row 1).
   final List<Map<String, dynamic>> rows;
   final CsvProblem? problem;
+
+  /// Headers the system does not read, as written in the file, so a wrong
+  /// header (`cp number` instead of `cp_no`) is obvious to the admin.
+  final List<String> ignoredColumns;
 }
 
 /// Reads the worker CSV. The first row must be the column names. Columns the
-/// system does not know are ignored, and empty lines are skipped. A bad row
-/// is not rejected here: the server checks every row and reports it
-/// (CONTRACT.md section 4.14).
+/// system does not know are not read (and are listed in `ignoredColumns`), and
+/// empty lines are skipped. A bad row is not rejected here: the server checks
+/// every row and reports it (CONTRACT.md section 4.14).
 CsvParseResult parseWorkersCsv(String source) {
   final text = source.startsWith('﻿') ? source.substring(1) : source;
   final table = Csv().decode(text);
   if (table.isEmpty) return const CsvParseResult(problem: CsvProblem.empty);
 
-  final header = [
-    for (final cell in table.first) '$cell'.trim().toLowerCase(),
+  final written = [for (final cell in table.first) '$cell'.trim()];
+  final header = [for (final cell in written) cell.toLowerCase()];
+  final ignored = <String>[
+    for (var i = 0; i < written.length; i++)
+      if (written[i].isNotEmpty && !csvColumns.contains(header[i])) written[i],
   ];
   if (!header.contains('name')) {
-    return const CsvParseResult(problem: CsvProblem.noNameColumn);
+    return CsvParseResult(
+      problem: CsvProblem.noNameColumn,
+      ignoredColumns: ignored,
+    );
   }
 
   final rows = <Map<String, dynamic>>[];
@@ -54,8 +68,36 @@ CsvParseResult parseWorkersCsv(String source) {
     rows.add({'row': index + 1, ...values});
   }
   return rows.isEmpty
-      ? const CsvParseResult(problem: CsvProblem.empty)
-      : CsvParseResult(rows: rows);
+      ? CsvParseResult(problem: CsvProblem.empty, ignoredColumns: ignored)
+      : CsvParseResult(rows: rows, ignoredColumns: ignored);
+}
+
+/// A row whose name is already used by an earlier row of the same file.
+class FileRepeat {
+  const FileRepeat(this.row, this.firstRow);
+  final int row;
+  final int firstRow;
+}
+
+/// Finds names that appear more than once in the file. The first row with a
+/// name is kept; each later row with the same name (ignoring case and the
+/// spaces at the ends) is a repeat. The server cannot see these in a preview,
+/// because nothing is saved yet.
+List<FileRepeat> findRepeatsInFile(List<Map<String, dynamic>> rows) {
+  final firstSeen = <String, int>{};
+  final repeats = <FileRepeat>[];
+  for (final row in rows) {
+    final name = '${row['name'] ?? ''}'.trim().toLowerCase();
+    if (name.isEmpty) continue;
+    final number = row['row'] as int;
+    final first = firstSeen[name];
+    if (first == null) {
+      firstSeen[name] = number;
+    } else {
+      repeats.add(FileRepeat(number, first));
+    }
+  }
+  return repeats;
 }
 
 class ImportRowError {
@@ -117,11 +159,10 @@ class ImportSummary {
   }
 }
 
-typedef ImportCall =
-    Future<Map<String, dynamic>> Function(
-      List<Map<String, dynamic>> rows,
-      bool commit,
-    );
+typedef ImportCall = Future<Map<String, dynamic>> Function(
+  List<Map<String, dynamic>> rows,
+  bool commit,
+);
 
 /// Sends [rows] to the server in chunks of at most [maxImportChunk] and adds
 /// up the answers. [onProgress] gets (rows done, rows in total).
@@ -143,13 +184,12 @@ Future<ImportSummary> importInChunks(
   return summary;
 }
 
-/// The rows the admin confirmed as duplicates, marked so the server inserts
-/// them (CONTRACT.md section 14: `"allow_duplicate": true`).
+/// The rows (by row number) the admin confirmed as duplicates, marked so the
+/// server inserts them (CONTRACT.md section 14: `"allow_duplicate": true`).
 List<Map<String, dynamic>> confirmedDuplicateRows(
   List<Map<String, dynamic>> rows,
-  List<ImportDuplicate> duplicates,
+  Set<int> numbers,
 ) {
-  final numbers = {for (final d in duplicates) d.row};
   return [
     for (final row in rows)
       if (numbers.contains(row['row'])) {...row, 'allow_duplicate': true},

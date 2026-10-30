@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/l10n/app_localizations.dart';
 import '../../../shared/widgets/language_toggle.dart';
+import '../../../shared/widgets/refresh_button.dart';
 import '../data/worker_service.dart';
 import '../data/worker_export_service.dart';
 import 'import_workers_dialog.dart';
@@ -28,13 +29,28 @@ class _WorkersPageState extends State<WorkersPage> {
     _workers = _service.listWorkers();
   }
 
-  void _refresh() {
-    setState(() => _workers = _service.listWorkers());
+  // The setState callbacks below have a block body on purpose. An arrow
+  // callback like `setState(() => _workers = ...)` returns the Future, and in
+  // a debug build Flutter then throws before it rebuilds, so the list never
+  // changes until the browser is reloaded.
+  //
+  // Completes when the new list has arrived (or failed), so the refresh button
+  // can turn until then.
+  Future<void> _refresh() {
+    final next = _service.listWorkers();
+    setState(() {
+      _workers = next;
+    });
+    return next.then<void>((_) {}, onError: (Object _) {});
   }
 
   Future<void> _reloadAfterMutation() async {
     final workers = await _service.listWorkers();
-    if (mounted) setState(() => _workers = Future.value(workers));
+    if (mounted) {
+      setState(() {
+        _workers = Future.value(workers);
+      });
+    }
   }
 
   @override
@@ -44,7 +60,7 @@ class _WorkersPageState extends State<WorkersPage> {
       appBar: AppBar(
         title: Text(l10n.workers),
         actions: [
-          IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
+          RefreshButton(tooltip: l10n.refresh, onRefresh: _refresh),
           IconButton(
             tooltip: l10n.printAllCards,
             onPressed: _printAllCards,
@@ -139,9 +155,8 @@ class _WorkersPageState extends State<WorkersPage> {
     }).toList();
     if (!mounted) return;
     if (active.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(l10n.noCardsToPrint)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(l10n.noCardsToPrint)));
       return;
     }
     try {
@@ -167,118 +182,60 @@ class _WorkersPageState extends State<WorkersPage> {
     final address = TextEditingController(
       text: existing?['address'] as String?,
     );
-    String? gender = existing?['gender'] as String?;
-    DateTime? birthDate = DateTime.tryParse(
-      '${existing?['date_of_birth'] ?? ''}',
-    );
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(existing == null ? l10n.addWorker : l10n.editWorker),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: name,
-                  decoration: InputDecoration(labelText: l10n.fullName),
-                ),
-                TextField(
-                  controller: cpNo,
-                  decoration: InputDecoration(labelText: l10n.cpNumber),
-                ),
-                TextField(
-                  controller: address,
-                  decoration: InputDecoration(labelText: l10n.address),
-                ),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String?>(
-                  initialValue: gender,
-                  decoration: InputDecoration(labelText: l10n.gender),
-                  items: [
-                    DropdownMenuItem(value: null, child: Text(l10n.notSpecified)),
-                    DropdownMenuItem(value: 'male', child: Text(l10n.male)),
-                    DropdownMenuItem(value: 'female', child: Text(l10n.female)),
-                    DropdownMenuItem(
-                      value: 'other',
-                      child: Text(l10n.otherGender),
-                    ),
-                  ],
-                  onChanged: (value) => setDialogState(() => gender = value),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: birthDate ?? DateTime(1990),
-                            firstDate: DateTime(1900),
-                            lastDate: DateTime.now(),
-                          );
-                          if (picked != null) {
-                            setDialogState(() => birthDate = picked);
-                          }
-                        },
-                        icon: const Icon(Icons.cake),
-                        label: Text(
-                          birthDate == null
-                              ? l10n.dateOfBirth
-                              : '${l10n.dateOfBirth}: '
-                                    '${birthDate!.toIso8601String().substring(0, 10)}',
-                        ),
-                      ),
-                    ),
-                    if (birthDate != null)
-                      IconButton(
-                        tooltip: l10n.clearDate,
-                        onPressed: () => setDialogState(() => birthDate = null),
-                        icon: const Icon(Icons.clear),
-                      ),
-                  ],
-                ),
-              ],
-            ),
+      builder: (context) => AlertDialog(
+        title: Text(existing == null ? l10n.addWorker : l10n.editWorker),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: name,
+                decoration: InputDecoration(labelText: l10n.fullName),
+              ),
+              TextField(
+                controller: cpNo,
+                decoration: InputDecoration(labelText: l10n.cpNumber),
+              ),
+              TextField(
+                controller: address,
+                decoration: InputDecoration(labelText: l10n.address),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(l10n.cancel),
-            ),
-            FilledButton(
-              onPressed: () async {
-                if (name.text.trim().isEmpty) return;
-                try {
-                  if (existing == null) {
-                    await _service.createWorker(
-                      name: name.text,
-                      cpNo: cpNo.text,
-                      address: address.text,
-                      gender: gender,
-                      dateOfBirth: birthDate,
-                    );
-                  } else {
-                    await _service.updateWorker(
-                      workerId: existing['id'] as String,
-                      name: name.text,
-                      cpNo: cpNo.text,
-                      address: address.text,
-                      gender: gender,
-                      dateOfBirth: birthDate,
-                    );
-                  }
-                  if (context.mounted) Navigator.pop(context, true);
-                } on Object catch (error) {
-                  if (mounted) _showOperationError(error);
-                }
-              },
-              child: Text(l10n.save),
-            ),
-          ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () async {
+              if (name.text.trim().isEmpty) return;
+              try {
+                if (existing == null) {
+                  await _service.createWorker(
+                    name: name.text,
+                    cpNo: cpNo.text,
+                    address: address.text,
+                  );
+                } else {
+                  await _service.updateWorker(
+                    workerId: existing['id'] as String,
+                    name: name.text,
+                    cpNo: cpNo.text,
+                    address: address.text,
+                  );
+                }
+                if (context.mounted) Navigator.pop(context, true);
+              } on Object catch (error) {
+                if (mounted) _showOperationError(error);
+              }
+            },
+            child: Text(l10n.save),
+          ),
+        ],
       ),
     );
     name.dispose();

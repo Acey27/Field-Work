@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/l10n/app_localizations.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/supabase/login_notice.dart';
 import '../../../shared/widgets/language_toggle.dart';
 import '../data/auth_service.dart';
 
@@ -32,6 +33,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   Future<void> _signIn(AppRole fallbackRole) async {
     final l10n = AppLocalizations.of(context);
+    loginNotice.value = null;
     setState(() {
       _busy = true;
       _error = null;
@@ -131,6 +133,22 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     },
                   ),
                   const SizedBox(height: 24),
+                  // Why the app came back here by itself (account or phone
+                  // turned off, session ended); gone once the user signs in.
+                  ValueListenableBuilder<String?>(
+                    valueListenable: loginNotice,
+                    builder: (context, code, _) => code == null
+                        ? const SizedBox.shrink()
+                        : Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Text(
+                              l10n.authError(code),
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          ),
+                  ),
                   if (_error != null)
                     Text(
                       _error!,

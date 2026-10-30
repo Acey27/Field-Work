@@ -86,6 +86,13 @@ Wire format: timestamps are ISO 8601 in UTC with `Z` (`2026-10-19T22:02:00Z`). D
 - Workers are rows in `workers`. They never log in.
 - A logged-out request (`anon`) must get nothing from any table or function except `ping()`.
 
+**Sessions and logging out (app).**
+
+- The app has a real log out (`auth.signOut`): the Log out button on the admin and super admin screens and the icon in the scanner bar. Waiting scans stay in the phone's database; a technician who logs out with scans waiting is asked first.
+- A technician who is still logged in when the admin turns the account off, or turns this phone off (revoked), is logged out by the app: `get_my_context` (checked about every 30 seconds while online, and on every sync) answers `E_ACCOUNT_DISABLED` or `E_DEVICE_REVOKED`, the app stops scanning, signs out and shows the reason on the login page. A phone with no internet cannot learn this until it reaches the server; the server refuses every upload from a disabled account regardless. Other codes (`E_DEVICE_PENDING`, `E_DEVICE_NOT_APPROVED`, `E_NO_ACTIVE_FIELD`) stop scanning with a message but do not log out, and the phone looks again every 30 seconds.
+- Uploads only carry the signed-in technician's own waiting scans (`pendingScans(technicianId)`), so another technician who logs in on the same phone never uploads someone else's scans.
+- An access token that expired while a browser tab or computer slept (`401` with `PGRST303`, "JWT expired") is renewed by the HTTP client and the same request is sent once more. When the refresh token is gone too, the session is ended and the app returns to the login page with "Your session ended" (`E_SESSION_ENDED`, an app-side code, not returned by the database).
+
 ### 1.6 Soft delete
 
 Nothing a person can delete from the screen is erased at once.
@@ -132,15 +139,15 @@ Types: `uuid`, `text`, `int`, `bool`, `date`, `timestamptz`, `jsonb`. "FK" means
 | `name` | text not null | |
 | `cp_no` | text null | Personal data |
 | `address` | text null | Personal data |
-| `gender` | text null | **[P]** one of `male`, `female`, `other`. Import maps case-insensitively |
-| `date_of_birth` | date null | Personal data |
+| `gender` | text null | **[P]** Not used since migration 018 (SPEC section 3). The column stays; the app and the import neither read nor write it |
+| `date_of_birth` | date null | Not used since migration 018. The column stays; nothing reads or writes it |
 | `qr_check` | text not null | See 1.3. Default: random 3 characters |
 | `qr_version` | int not null default 1 | +1 on every reissue |
 | `active` | bool not null default true | |
 | `deleted_at` | timestamptz null | |
 | `updated_at` | timestamptz not null default now() | Used by the phone cache sync |
 
-Indexes: `lower(name)`, and `(lower(name), date_of_birth)` (not unique, only used for duplicate warnings).
+Indexes: `lower(name)`, and `(lower(name), date_of_birth)` (not unique). Duplicate warnings compare `lower(btrim(name))` only (migration 018).
 
 ### 2.3 `fields`
 
@@ -238,6 +245,7 @@ One row per in-and-out pair. Hours always come from here, never from raw scans.
 | `time_out` | timestamptz null | Null means still clocked in |
 | `closed_by` | `close_reason` null | `scan`, `end_field_day`, `admin`, `safety_net` |
 | `in_scan_id` / `out_scan_id` | uuid FK scans null | Null for manual records |
+| `taken_over` | bool not null default false | True when this session was opened by a scan that closed another technician's open session (safety net). While it is open, only its own technician can clock the worker out (Section 4.6, rule 6). Added in migration 019 |
 | `entered_by_admin` | bool not null default false | Shown as "Entered by admin" |
 | `manual_reason` | text null | Required when `entered_by_admin` is true |
 
@@ -316,7 +324,7 @@ Event names for actions that are not row changes: `login`, `login_failed`, `csv_
 | `field_day_status` | `working`, `ended` |
 | `end_method` | `technician`, `admin` |
 | `close_reason` | `scan`, `end_field_day`, `admin`, `safety_net` |
-| `scan_result` | `clocked_in`, `clocked_out`, `ignored_repeat`, `blocked_bad_qr`, `blocked_unknown_worker`, `blocked_inactive_worker`, `blocked_inactive_field`, `blocked_inactive_technician`, `blocked_not_assigned` |
+| `scan_result` | `clocked_in`, `clocked_out`, `ignored_repeat`, `blocked_bad_qr`, `blocked_unknown_worker`, `blocked_inactive_worker`, `blocked_inactive_field`, `blocked_inactive_technician`, `blocked_not_assigned`, `blocked_held_elsewhere` (added in migration 019) |
 
 **Scan flags** (values inside `scans.flags`) **[P names]**:
 
@@ -338,7 +346,7 @@ Errors are raised as `RAISE EXCEPTION '<E_CODE>' USING ERRCODE = 'P0001', DETAIL
 
 ### 4.1 `ping()` returns `{ "now": "<utc>" }`
 
-Callable by `anon`. Used by the keep-alive job only. Touches no table.
+Callable by `anon` and, since migration 018, by signed-in users. Used by the keep-alive job and by the scanner, which asks the server a real question before it says Online (a wifi or mobile link alone does not mean the internet works). Touches no table.
 
 ### 4.2 `register_device(p_device_uuid uuid, p_label text)` (technician)
 
@@ -422,7 +430,8 @@ Rules, in order, for each scan (the server decides in or out, never the phone):
 6. **Date.** `work_date = ph_date(scanned_at)`. Find the worker's open session with that `work_date`. A session from an earlier date is never touched (a scan on a new date is always a new time in).
    - No open session: create the field day if needed, open a session, result `clocked_in`.
    - Open session by the **same** technician: close it at `date_trunc('minute', scanned_at)` with `closed_by = 'scan'`, result `clocked_out`.
-   - Open session by **another** technician (safety net): close that session at this scan's minute with `closed_by = 'safety_net'`, open a new session for this technician, result `clocked_in`, flags include `safety_net_close`, and `closed_session_id` is returned.
+   - Open session by **another** technician that was **not** itself a takeover (safety net): close that session at this scan's minute with `closed_by = 'safety_net'`, open a new session for this technician with `taken_over = true`, result `clocked_in`, flags include `safety_net_close`, and `closed_session_id` is returned. The first technician gets a `worker_clocked_out` notification (Section 15).
+   - Open session by **another** technician that **was** a takeover (`taken_over = true`): the scan is refused with result `blocked_held_elsewhere`. It is saved in `scans` with no session, and nothing else changes (not even this technician's field day). Only the technician who holds the worker can clock them out. When they do, or End field day or the admin closes the session, any technician can clock the worker in again (migration 019).
 7. **Flags.** Add `outside_hours`, `no_location`, and `after_field_end` where they apply. Flags never stop a scan.
 
 ### 4.7 `end_field_day(p_device_uuid uuid, p_work_date date, p_ended_at timestamptz)` (technician)
@@ -458,6 +467,8 @@ Checks: `E_TIME_OUT_BEFORE_IN`, `E_TIME_IN_FUTURE`, `E_OVERLAP` (the worker alre
 
 `status` is one of `working`, `ended`, `not_ended`, and it is **computed**:
 `not_ended` when the stored status is `working` and (`work_date < ph_today()` or the Philippine time is at or after `reminder_time`). Technicians with no field day on that date are not listed **[P]**.
+
+**Earlier days (migration 020).** When `p_date` is null (the dashboard call), the result also includes the field days of earlier dates that are still `working` (never ended), as `not_ended`, newest date first. They are the same days the tile `field_days_not_ended` of `get_stats_today` counts, so the list and the tile always agree, and the admin can end them with `admin_end_field_day` (which takes any `work_date`). With a date passed, only that date is returned.
 
 ### 4.10 `get_my_field_day(p_work_date date default null)` (technician)
 
@@ -528,26 +539,30 @@ Workers, fields, and field assignments are managed with normal table calls (`ins
 | `reissue_card(p_worker_id text)` | Sets a new random `qr_check`, `qr_version + 1`, `updated_at = now()`. Returns `{ "qr_payload": "W-00123.p2m" }`. Audit entry |
 | `import_workers(p_rows jsonb, p_commit bool)` | See below |
 
-`import_workers` input rows: `{ "row": 12, "name": "…", "cp_no": "…", "address": "…", "gender": "…", "date_of_birth": "2000-01-31" }`. The app reads the CSV (columns `name, cp_no, address, gender, date_of_birth`), then sends the rows in chunks of at most 500.
+`import_workers` input rows: `{ "row": 12, "name": "…", "cp_no": "…", "address": "…" }`. The app reads the CSV (columns `name, cp_no, address`), then sends the rows in chunks of at most 500. A header the app does not read (for example `cp number`, `gender`, `date_of_birth`) is not sent; the preview says "Column 'cp number' was not used". An extra `gender` or `date_of_birth` key sent by another client is ignored.
 
 Output:
 
 ```json
 { "valid": 1987,
-  "errors": [ { "row": 12, "code": "E_CSV_DOB_INVALID" } ],
+  "errors": [ { "row": 12, "code": "E_CSV_NAME_MISSING" } ],
   "duplicates": [ { "row": 40, "worker_id": "W-00031" } ],
   "inserted": 0 }
 ```
 
-- `p_commit = false`: validate only (the preview). `p_commit = true`: insert every valid row. A bad row never stops the others. Duplicates (same name and date of birth) are inserted only if the admin confirms, so the app sends the confirmed duplicate rows in the next call with `"allow_duplicate": true` on the row.
-- Row error codes: `E_CSV_NAME_MISSING`, `E_CSV_DOB_INVALID`, `E_CSV_GENDER_INVALID`, `E_CSV_ROW_TOO_LONG`. The app turns them into "Row 12: date of birth is not valid".
+- `p_commit = false`: validate only (the preview). `p_commit = true`: insert every valid row. A bad row never stops the others. Duplicates (the same `lower(btrim(name))` as a saved worker) are inserted only if the admin confirms, so the app sends the confirmed duplicate rows in the next call with `"allow_duplicate": true` on the row. A preview inserts nothing, so the server cannot see a name repeated inside the file; the app finds those itself (the later rows are "same name as row N in this file") and confirms them with the same box. On commit the server also skips a later row whose name an earlier row of the same call or file just saved.
+- Row error codes: `E_CSV_NAME_MISSING`, `E_CSV_ROW_TOO_LONG`. The app turns them into "Row 12: The name is missing". `E_CSV_DOB_INVALID` and `E_CSV_GENDER_INVALID` are no longer returned (migration 018).
 - One audit entry per commit with the counts in `meta`.
 
 Fields and technician accounts (migration 016). The app uses these instead of direct table writes:
 
 | Function | Purpose |
 | --- | --- |
+| `admin_create_field(p_name text, p_location text, p_address text)` | Add a field. `E_FIELD_NAME_MISSING`. Audit entry |
 | `admin_update_field(p_field_id uuid, p_name text, p_location text, p_address text)` | Edit a field. `E_FIELD_NAME_MISSING`, `E_FIELD_NOT_FOUND`. Audit entry |
+| `admin_set_field_active(p_field_id uuid, p_active bool)` | Turn a field off or on. `E_FIELD_NOT_FOUND`. Audit entry |
+
+The three field functions return the field as `jsonb` (`to_jsonb` of the row) since migration 018. Before that they returned the table row type, and the app's reading of the answer could fail after the change had already been saved.
 | `admin_assign_field(p_technician_id uuid, p_field_id uuid)` | Closes the technician's current assignment and opens the new one in one step (2.4). Returns `{ assignment_id, changed }`; `changed` is false when the technician already has that field. `E_FIELD_NOT_FOUND`. Audit entry |
 | `admin_set_technician_active(p_technician_id uuid, p_active bool)` | Turns a technician account off or on. Off also sets the approved phone to `revoked`. A profile with `active = false` can call nothing (Section 7). Audit events `account_disabled` / `account_enabled` |
 
@@ -572,7 +587,7 @@ Fields and technician accounts (migration 016). The app uses these instead of di
   "workers": [ { "id": "W-00001", "name": "Zeann" } ] }
 ```
 
-`workers` are the active workers that technician scanned (clocked in or out) in the 14 days up to `p_date` (Section 17, item 3). `field` is the current assignment, or the field of the last field day, or null. `E_FIELD_DAY_NOT_FOUND` if the technician does not exist. The app draws the PDF in the current language, with at least 25 rows and at least 8 blank rows.
+`workers` are the active workers that technician scanned (clocked in or out) or had a time record for (including records the admin typed in, which have no scan) in the 14 days up to `p_date`, plus anyone with a record in the sheet's field on `p_date` (Section 17, item 3; widened in migration 018). The time boxes are not in the answer: they are written by hand. `field` is the current assignment, or the field of the last field day, or null. `E_FIELD_DAY_NOT_FOUND` if the technician does not exist. The app draws the PDF in the current language, with at least 25 rows and at least 8 blank rows.
 
 ---
 
@@ -647,7 +662,7 @@ Additional rules:
 ## 8. Sync protocol (phone and server)
 
 1. The phone saves each scan in `local_scans` (`pending`).
-2. When online (check with `connectivity_plus` and then a real call), the sync loop runs. It never polls more often than once every 30 seconds **[P]**.
+2. When online (check with `connectivity_plus` and then a real call), the sync loop runs. It never polls more often than once every 30 seconds **[P]**. The real call is `ping()` (4.1): the status says Online only after the server answered. The phone asks again every 10 seconds while Offline and every 30 seconds while Online, on every network change and when the app comes back to the front, and at the same time looks for the technician's own unread notices (`worker_clocked_out`, Section 15). A failed sync is retried (item 5) even when no scan is waiting.
 3. Upload order: first `get_worker_cache` (if due), then `ingest_scans` in batches of **50**, oldest first, then any `local_events` (`end_field_day`) in order.
 4. For each result in the response, mark the matching row `uploaded` and store `server_result`. A `blocked_*` result marks the row `rejected` and shows the technician a message (Section 13).
 5. If the call fails because of the network or a server error, keep everything `pending`, increase `attempts`, and retry later with growing waits (30 s, 1 min, 2 min, then every 5 min). Repeating is safe because of `scan_id`.
@@ -681,7 +696,7 @@ Backups: the free plan has none. Who runs the weekly backup is an open item in t
 
 ### 10.1 End field day button (technician home)
 
-- Shows `clocked_in_count` workers still clocked in (from `local_scans` when offline, from `get_my_field_day` when online).
+- Shows `clocked_in_count` workers still clocked in. From `get_my_field_day` when online and nothing is waiting to upload (it knows about workers closed on another phone, Section 15); from `local_scans` when offline or while scans are waiting. The confirmation asks the server first, so it does not show a worker who was already clocked out elsewhere.
 - Confirmation text: "Clock out 5 workers at 4:52 PM?" The time is the phone's time in Philippine time.
 
 ### 10.2 Hours for a date
@@ -797,8 +812,8 @@ The app never shows the code. It shows the l10n message for the key (Section 1.1
 | `E_SETTING_UNKNOWN` | This setting does not exist. |
 | `E_SETTING_INVALID` | This value is not allowed for this setting. |
 | `E_CSV_NAME_MISSING` | The name is missing. |
-| `E_CSV_DOB_INVALID` | The date of birth is not valid. |
-| `E_CSV_GENDER_INVALID` | The gender must be male, female, or other. |
+| `E_CSV_DOB_INVALID` | Not returned since migration 018 (date of birth is not used). |
+| `E_CSV_GENDER_INVALID` | Not returned since migration 018 (gender is not used). |
 | `E_CSV_ROW_TOO_LONG` | A value in this row is too long. |
 
 Scan results shown on the scanner screen (these are `scan_result` values, not exceptions):
@@ -814,6 +829,9 @@ Scan results shown on the scanner screen (these are `scan_result` values, not ex
 | `blocked_inactive_field` | Red: "This field is turned off. Tell your admin." |
 | `blocked_inactive_technician` | Red: "Your account is turned off. Tell your admin." |
 | `blocked_not_assigned` | Red: "You are not assigned to this field. Tell your admin." |
+| `blocked_held_elsewhere` | Red: "Another technician has this worker clocked in. Only that technician can clock them out." |
+
+The phone shows a scan as saved at once and learns the server's answer when it syncs. A refused result then appears as a message with the worker's name ("Juan dela Cruz: not saved. …"), the scan is marked `rejected` and no longer counts for in or out on the phone. The phone also learns that a worker was taken over from the `worker_clocked_out` notification (Section 15): until that worker is clocked out by the new holder, this phone treats its own earlier scans of the worker as closed, so the next scan is shown as a clock in, never as a clock out.
 
 ---
 
@@ -859,6 +877,7 @@ Value types are fixed. Times are `"HH:MM"` in Philippine time.
 | `failed_logins` | all admins | `{ username, count }` | `audit_logs` or none |
 | `bulk_action` | super admin | `{ actor_id, action, count }` | `audit_logs` |
 | `new_device_login` | the admin or super admin who logged in | `{ device_label, at }` | none. Planned after the first version |
+| `worker_clocked_out` | the technician whose session was closed | `{ worker_id, worker_name, reason ("safety_net"), session_id, time_out }` | none. Written by a trigger on `attendance_sessions` when a second technician's scan closes the first technician's session (SPEC section 6). The scanner reads it with `get_my_notifications`, shows it until the technician closes it, and marks it read. Admin closes send nothing |
 
 ---
 
@@ -880,6 +899,9 @@ Value types are fixed. Times are `"HH:MM"` in Philippine time.
 | `015_reminders_notifications.sql` | B | `job_field_day_reminders` (pg_cron, every 5 minutes), `get_my_notifications`, `mark_notification_read`, settings `reminder_repeat_minutes`, `technician_reminder_enabled`, `burst_scan_count`, `burst_window_seconds` |
 | `016_admin_records_sheet_assign.sql` | B | `admin_add_time_record` with `E_OVERLAP`, `admin_fix_time_record`, `get_sessions_for_date`, `get_paper_sheet`, `admin_update_field`, `admin_assign_field`, `admin_set_technician_active` (replaces the draft `admin_correct_session`) |
 | `017_stats_flagged.sql` | B | `get_stats_today`, `get_stats_week`, `get_flagged_items` and the `scans_device_scanned_idx` index (replace the drafts `admin_statistics` and `admin_flagged_scans`) |
+| `018_fixes_after_testing.sql` | B | Trigger `worker_clocked_out` notice (section 15), field functions return `jsonb` (section 4.14), `import_workers` without gender and date of birth, wider `get_paper_sheet` (section 4.16), `ping()` for signed-in users (section 4.1) |
+| `019_takeover_once.sql` | B | `ingest_scans` refuses a scan for a worker another technician took over (`blocked_held_elsewhere`), new column `attendance_sessions.taken_over` (sections 2.8, 4.6, 13) |
+| `020_old_field_days.sql` | B | `get_today_field_days` called without a date also lists earlier field days that were never ended (section 4.9) |
 | `0NN_jobs_retention.sql` (planned) | B | Retention jobs, Section 9. Next free number after the migrations above |
 
 App side (A): everything in Section 6 and 8, the scanner, End field day, and the technician screens. Both of you: this file, `core/l10n`, `core/router`, `core/theme`.
@@ -912,7 +934,10 @@ Each item has a recommended answer. Tick one when agreed.
 | 2026-10-27 | 0.1 | draft | First draft from the spec and the build guide |
 | 2026-10-28 | 0.1 | project note | Phase 3 integration verification is pending: technician account provisioning, field/worker test data, offline-to-Supabase sync, retry idempotency, role checks, and end-field-day behavior must be tested through the UI against the development project. Phase 4 may proceed, but Phase 3 is not signed off until these tests pass. |
 | 2026-10-29 | 0.1 | project note | Section 4.9: `get_today_field_days` also returns `field_day_id` and `work_date`. Migrations 012 to 014 added (section 16). Section 14: admins (not only the super admin) change `scan_hours_start` and `scan_hours_end`, a company decision; SPEC section 2 updated in the same change. The technician app now calls `register_device` before `get_my_context` (sections 4.2, 4.4). |
+| 2026-10-30 | 0.1 | project note | Migration 019: the safety net now happens once. A technician can take over a worker the first technician left clocked in; after that only the new holder can clock the worker out, and a scan by anyone else is refused (`blocked_held_elsewhere`, new `attendance_sessions.taken_over`). SPEC section 6 updated in the same change. The phone now shows a message for every refused (`blocked_*`) scan, and no longer shows CLOCKED OUT for a worker another technician took over. |
 | 2026-10-29 | 0.1 | project note | Phase 4 completion (migrations 016, 017): sections 4.8 (`get_sessions_for_date`, overlap rule), 4.12 (how the statistics are worked out), 4.14 (field edit, one-step assignment, technician on/off) and new 4.16 (`get_paper_sheet`). The statistics and flagged functions now use the contract names; the drafts `admin_statistics`, `admin_flagged_scans` and `admin_correct_session` were dropped. The app now has a CSV file picker, chunks of 500, row-level messages and the duplicate confirmation. The Edge Function `set_account_active` (section 5) is still not built. |
+| 2026-10-30 | 0.1 | project note | Fixes after testing on real devices (migration 018). Gender and date of birth are no longer used; duplicates are by name only (sections 2.2, 4.14; SPEC section 3). `worker_clocked_out` notification added (section 15). Field functions return `jsonb`. `get_paper_sheet` also lists workers with admin-entered records. `ping()` is open to signed-in users and the scanner uses it for Online or Offline. The scanner asks `get_my_field_day` for the clocked-in count when nothing is waiting to upload (section 10.1). The admin dashboard fetches again every 15 seconds while visible. The reminder time stays notice-only (SPEC section 8). Admin pages no longer call `setState` with a callback that returns a Future (a debug build threw before rebuilding, so saved changes did not show). |
+| 2026-10-31 | 0.1 | project note | Round 3 fixes after testing (migration 020). `get_today_field_days` without a date also lists earlier field days that were never ended, so the "Field days not ended" tile and the list agree (section 4.9). Real log out added; a technician whose account or phone the admin turned off is logged out automatically (section 1.5, "Sessions and logging out"). Expired access tokens are renewed and retried once, otherwise the app returns to the login page. Refresh buttons turn while a page loads. Layout fixes for small screens: the scanner banners and lower rows scroll inside a share of the height, the field-day tile no longer uses a ListTile trailing button, the statistics cards size to their text, the language toggle is compact on phones. |
 | 2026-10-29 | 0.1 | project note | Migration 015: reminder job, `get_my_notifications` (section 4.15), reminder settings seeded (section 14). `device_approval_needed` currently carries `{ technician_id, device_id }` only; the app shows a generic message for it. |
 
 ---

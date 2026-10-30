@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/l10n/app_localizations.dart';
 import '../../../shared/widgets/language_toggle.dart';
+import '../../auth/data/auth_service.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({required this.onLocaleChanged, super.key});
@@ -152,8 +153,11 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const SizedBox(height: 16),
                 OutlinedButton(
-                  onPressed: () => context.go('/login'),
-                  child: Text(l10n.login),
+                  onPressed: () async {
+                    await AuthService().signOut();
+                    if (context.mounted) context.go('/login');
+                  },
+                  child: Text(l10n.logOut),
                 ),
               ],
             ),

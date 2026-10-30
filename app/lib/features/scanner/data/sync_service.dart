@@ -43,8 +43,15 @@ class SyncService {
     await refreshWorkerCache();
     final deviceUuid = await _deviceService.deviceUuid();
     var uploadedScans = 0;
+    final refused = <RefusedScan>[];
+    // Only the signed-in technician's scans: another technician may have used
+    // this phone before and left scans waiting.
+    final technicianId = _client.auth.currentUser?.id;
     while (true) {
-      final scans = await database.pendingScans(limit: 50);
+      final scans = await database.pendingScans(
+        limit: 50,
+        technicianId: technicianId,
+      );
       if (scans.isEmpty) break;
       try {
         final response = await _client.rpc<Map<String, dynamic>>(
@@ -55,7 +62,9 @@ class SyncService {
             'p_scans': scans.map(_scanJson).toList(),
           },
         );
-        final mapped = await _mapScanResults(response['results']);
+        final mapped = await _mapScanResults(response['results'], {
+          for (final scan in scans) scan.scanId: scan.workerId,
+        }, refused);
         if (mapped == 0) {
           throw StateError('ingest_scans returned no scan results');
         }
@@ -69,7 +78,7 @@ class SyncService {
       }
     }
 
-    final events = await database.pendingEvents();
+    final events = await database.pendingEvents(technicianId: technicianId);
     var uploadedEvents = 0;
     for (final event in events) {
       try {
@@ -91,6 +100,7 @@ class SyncService {
     return SyncSummary(
       uploadedScans: uploadedScans,
       uploadedEvents: uploadedEvents,
+      refused: refused,
     );
   }
 
@@ -112,7 +122,14 @@ class SyncService {
     'lng': scan.lng,
   };
 
-  Future<int> _mapScanResults(Object? rawResults) async {
+  /// Stores each result. A refused scan (`blocked_*`) is added to [refused]
+  /// with the worker it was for ([workers] maps scan ID to worker ID), so the
+  /// technician can be told it was not saved.
+  Future<int> _mapScanResults(
+    Object? rawResults,
+    Map<String, String> workers,
+    List<RefusedScan> refused,
+  ) async {
     if (rawResults is! List) return 0;
     var mapped = 0;
     for (final raw in rawResults) {
@@ -122,6 +139,7 @@ class SyncService {
       final name = result['result'] as String?;
       if (name != null && scanUploadState(name) == 'rejected') {
         await database.markScanRejected(scanId, result);
+        refused.add(RefusedScan(workerId: workers[scanId] ?? '', result: name));
       } else {
         await database.markScanUploaded(scanId, result);
       }
@@ -138,14 +156,27 @@ class SyncService {
   }
 }
 
+/// A scan the server refused (a `blocked_*` result, CONTRACT.md section 13).
+/// It is not saved, so the technician is told which worker it was for.
+class RefusedScan {
+  const RefusedScan({required this.workerId, required this.result});
+
+  final String workerId;
+  final String result;
+}
+
 class SyncSummary {
   const SyncSummary({
     required this.uploadedScans,
     required this.uploadedEvents,
+    this.refused = const [],
   });
 
   final int uploadedScans;
   final int uploadedEvents;
+
+  /// Scans refused during this run.
+  final List<RefusedScan> refused;
 }
 
 String encodeServerResult(Map<String, dynamic> result) => jsonEncode(result);
