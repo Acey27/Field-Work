@@ -11,7 +11,7 @@ targets Android and web from one platform-neutral codebase, backed by Supabase
 | 1 Foundation, 2 Security and accounts | Built |
 | 3 Attendance core (scanner, offline queue, sync, End field day) | Built. Offline scan, sync once, and End field day were tried on a phone; the rest of the build guide section 10 attendance checklist is still to be run (30-second repeat, two technicians, 7:00 AM / 11:59 PM dates, outside scan hours) |
 | 4 Admin | Built, waiting for the "simulated day" test (see below) |
-| 5 Masterlist | Not started: a draft `admin_weekly_masterlist` exists, but `weekly_masterlist`, the Excel export, "Changed after export" and the worker lookup are Phase 5 |
+| 5 Masterlist | Built (migrations 021, 022): `weekly_masterlist`, Excel export (one `Masterlist` sheet, English), landscape print, "Changed after export", technician worker lookup. Waiting for the Phase 5 checklist on real data |
 | 6 Audit and retention, 7 Polish and pilot | Not started |
 
 Phase 4 contains: workers (add, edit, turn on/off, reissue card, print one card
@@ -93,11 +93,13 @@ the paper sheet list and the name-only CSV duplicate check work as described.
 Migration 019 adds the "taken over once" rule: a worker another technician
 took over can only be clocked out by that technician. Migration 020 makes
 Today's field days (and so the "Field days not ended" tile) also list earlier
-days that were never ended, so the admin can end them.
+days that were never ended, so the admin can end them. Migration 022 fixes
+"Changed after export" (the trigger compared a Monday with a session's own
+date); run `masterlist.sql` after 021 and 022.
 
 SQL checks live in `../supabase/tests/`. Open the file, paste the whole script
 into the SQL editor of the dev project and run it. The ones that change data
-(`admin.sql`, `reminders.sql`) run inside a transaction and end with
+(`admin.sql`, `reminders.sql`, `masterlist.sql`) run inside a transaction and end with
 `rollback`, so nothing is kept. A failed check stops with an error that starts
 with `FAIL`.
 
@@ -105,6 +107,7 @@ with `FAIL`.
 | --- | --- |
 | `admin.sql` | roles, Today's field days, earlier days never ended, manual End field day, time records and overlaps, fields (add, edit, on/off, jsonb answers) and assignment, technician on/off, 2,000-row CSV import and name-only duplicates, statistics, flagged list, paper sheet, settings, the safety-net "Worker clocked out" notice |
 | `reminders.sql` | the reminder job: first reminder, no duplicates, one repeat, nothing for ended days |
+| `masterlist.sql` | the weekly masterlist (Zeann and Czar example, one section per technician and field) and "Changed after export" for a change on any day of the week |
 | `takeover.sql` | two technicians scan the same worker: the safety net happens once, then only the new holder can clock the worker out and the other technician's scan is refused (needs two active technicians) |
 | `settings.sql` | time settings and their validation |
 | `attendance.sql`, `security.sql`, `foundation.sql` | Phases 1 to 3 |

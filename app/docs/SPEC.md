@@ -194,14 +194,15 @@ A filter lets the admin choose **Daily** or **Weekly**.
 
 Every week the admin exports the masterlist and gives it to the accountant. It is an Excel file (.xlsx), laid out like the company's reference sheet.
 
-* One section per technician, with the technician's ID, name, field (location), and address.  
+* One section per technician, with the technician's ID, name and the date of the week. The field and its address are not printed (decided 2026-11-01).  
 * One row per worker in that section.  
 * Columns: ID, Name of the Worker, Monday to Sunday hours, Total Weekly Hours, Total Weekly Present, Signature.  
 * Hours are shown in full detail, for example **5 hours 33 minutes**.  
 * **Total Weekly Present** is the number of dates the worker had a time in.  
 * **Signature** is always left blank, for the accountant's use outside the system. There is no Pay column.  
 * A worker who worked in two fields appears in each technician's section, with the hours for that field.  
-* After exporting, getting the file to the accountant is the admin's responsibility.
+* After exporting, getting the file to the accountant is the admin's responsibility.  
+* The Excel file has one sheet, in English, with one block per technician and field as in the example below. The printed version is on a **landscape** page that fits both A4 and Letter paper (the print preview opens in landscape), and every column, including Signature, fits inside the page.
 
 * If the technician scans a Worker on at least one or more than a  day of the week, the worker hours will appear in the weekly masterlist. 
 
@@ -212,14 +213,14 @@ Every week the admin exports the masterlist and gives it to the accountant. It i
 Example section:  
 **Date:** 19-25 Oct 2026
 
-**ID:** T-001   **Name of Technician:** John Doe   **Field (location):** Field 1  
+**ID:** T-001   **Name of Technician:** John Doe   **Date:** 19-25 Oct 2026  
 
 | ID | Name of the Worker | Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday | Total Weekly Hours | Total Weekly Present | Signature |
 | :---- | :---- | :---- | :---- | :---- | :---- | :---- | :---- | :---- | :---- | :---- | :---- |
 | W-00001 | Zeann | 5 hours 33 minutes | 5 hours |  | 6 hours 10 minutes | 5 hours |  | 5 hours 20 minutes | 27 hours 3 minutes | 5 |  |
 | W-00002 | Czar | 10 hours |  |  | 8 hours 15 minutes | 2 hours | 9 hours |  | 29 hours 15 minutes | 4 |  |
 
-**ID:** T-002   **Name of Technician:** Juan Reyes   **Field (location):** Field 2 
+**ID:** T-002   **Name of Technician:** Juan Reyes   **Date:** 19-25 Oct 2026
 
 | ID | Name of the Worker | Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday | Total Weekly Hours | Total Weekly Present | Signature |
 | :---- | :---- | :---- | :---- | :---- | :---- | :---- | :---- | :---- | :---- | :---- | :---- |

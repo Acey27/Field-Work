@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +13,7 @@ import '../data/admin_tools_service.dart';
 import '../data/paper_sheet.dart';
 import '../../masterlist/data/masterlist.dart';
 import '../../masterlist/data/masterlist_print.dart';
+import '../../masterlist/presentation/masterlist_preview.dart';
 
 class AdminToolsPage extends StatefulWidget {
   const AdminToolsPage({required this.onLocaleChanged, super.key});
@@ -201,14 +203,6 @@ class _AdminToolsPageState extends State<AdminToolsPage> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
-          if (_changedAfterExport)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                l10n.changedAfterExport,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ),
           const Divider(height: 32),
           Text(
             l10n.manualTimeRecord,
@@ -273,6 +267,28 @@ class _AdminToolsPageState extends State<AdminToolsPage> {
             icon: const Icon(Icons.refresh),
             label: Text(l10n.loadMasterlist),
           ),
+          if (_changedAfterExport)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.warning_amber,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l10n.changedAfterExport,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (_unended.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -310,16 +326,36 @@ class _AdminToolsPageState extends State<AdminToolsPage> {
               padding: const EdgeInsets.only(top: 12),
               child: Text(l10n.noMasterlistRows),
             )
-          else
-            for (final row in _masterlist)
-              ListTile(
-                dense: true,
-                title: Text('${row.workerId} ${row.workerName}'),
-                subtitle: Text(
-                  '${row.technicianCode} / ${row.fieldLabel} • '
-                  '${formatMinutes(row.totalMinutes)}',
+          else ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(
+                l10n.masterlistSummary(
+                  _masterlist.length,
+                  groupMasterlist(_masterlist).length,
+                ),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            // What the Excel file and the printout will contain: one block
+            // per technician and field.
+            for (final section in groupMasterlist(_masterlist)) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  section.heading,
+                  style: Theme.of(context).textTheme.titleSmall,
                 ),
               ),
+              for (final row in section.rows)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('${row.workerId} ${row.workerName}'),
+                  trailing: Text(formatMinutes(row.totalMinutes)),
+                ),
+            ],
+          ],
         ],
       ),
     );
@@ -429,24 +465,59 @@ class _AdminToolsPageState extends State<AdminToolsPage> {
   List<String> _headers(AppLocalizations l10n) =>
       l10n.masterlistHeaders.split(',');
 
+  /// The accountant's file is always English, whatever the app's language is
+  /// (CONTRACT.md section 17, decision 12).
+  static const _excelL10n = AppLocalizations(Locale('en'));
+
   Future<void> _exportMasterlist(AppLocalizations l10n) async {
+    // SPEC.md section 12: a week with field days still Not ended can be
+    // exported anyway, but only after the admin confirms.
+    if (_unended.isNotEmpty) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(l10n.exportMasterlist),
+          content: Text(l10n.unendedWeekWarning(_unended.length)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(l10n.exportMasterlist),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true || !mounted) return;
+    }
     setState(() => _busy = true);
     try {
       final fileName = 'masterlist-${formatPhDate(_masterlistWeek)}.xlsx';
       final bytes = await _masterlistService.buildExcel(
         rows: _masterlist,
         weekLabel: _weekLabel(_masterlistWeek),
-        notEndedLabel: l10n.notEndedCell,
-        headers: _headers(l10n),
+        notEndedLabel: _excelL10n.notEndedCell,
+        headers: _headers(_excelL10n),
       );
       final saved = await _masterlistService.saveExcel(bytes, fileName);
-      if (saved != null) {
+      // On the web the file is downloaded and no path comes back (null), so
+      // only elsewhere does null mean the admin cancelled the save dialog.
+      if (saved != null || kIsWeb) {
         await _masterlistService.recordExport(
           weekStart: _masterlistWeek,
           fileName: fileName,
           rowCount: _masterlist.length,
         );
-        if (mounted) _showMessage(l10n.exportSaved);
+        // A new export starts clean: the "changed after export" notice goes.
+        final changed = await _masterlistService.hasChangedAfterExport(
+          _masterlistWeek,
+        );
+        if (mounted) {
+          setState(() => _changedAfterExport = changed);
+          _showMessage(l10n.exportSaved);
+        }
       }
     } on PostgrestException catch (error) {
       if (mounted) _showMessage(l10n.adminError(error.message));
@@ -468,9 +539,11 @@ class _AdminToolsPageState extends State<AdminToolsPage> {
         notEndedLabel: l10n.notEndedCell,
         headers: _headers(l10n),
       );
-      await Printing.layoutPdf(
-        name: 'masterlist-${formatPhDate(_masterlistWeek)}',
-        onLayout: (_) async => bytes,
+      if (!mounted) return;
+      await MasterlistPreviewPage.show(
+        context,
+        bytes: bytes,
+        fileName: 'masterlist-${formatPhDate(_masterlistWeek)}.pdf',
       );
     } on Object catch (error) {
       debugPrint('weekly masterlist print failed: $error');

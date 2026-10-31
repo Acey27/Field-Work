@@ -352,6 +352,11 @@ class AppLocalizations {
   String get printMasterlist => _text('printMasterlist');
   String get masterlistHeaders => _text('masterlistHeaders');
   String get noMasterlistRows => _text('noMasterlistRows');
+  String get masterlistPrintHint => _text('masterlistPrintHint');
+  String masterlistSummary(int workers, int sections) =>
+      _text('masterlistSummary')
+          .replaceFirst('{workers}', '$workers')
+          .replaceFirst('{sections}', '$sections');
   String unendedWeekWarning(int count) =>
       _text('unendedWeekWarning').replaceFirst('{count}', '$count');
   String get notEndedCell => _text('notEndedCell');
@@ -676,6 +681,8 @@ class AppLocalizations {
       'printMasterlist': 'Print masterlist',
       'masterlistHeaders': 'ID,Name of the Worker,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday,Total Weekly Hours,Total Weekly Present,Signature',
       'noMasterlistRows': 'No attendance was recorded for this week.',
+      'masterlistPrintHint': 'The page is landscape. In the print window choose Layout: Landscape and Margins: Default, or use the download button and print the PDF from your PDF viewer.',
+      'masterlistSummary': '{workers} worker rows in {sections} sections (one for each technician and field).',
       'unendedWeekWarning': '{count} field days in this week are not ended. You can export anyway.',
       'notEndedCell': 'Not ended',
       'exportSaved': 'Masterlist exported.',
@@ -1009,6 +1016,8 @@ class AppLocalizations {
       'printMasterlist': 'I-print ang masterlist',
       'masterlistHeaders': 'ID,Pangalan ng manggagawa,Lunes,Martes,Miyerkules,Huwebes,Biyernes,Sabado,Linggo,Kabuuang oras sa linggo,Kabuuang araw na pumasok,Signature',
       'noMasterlistRows': 'Walang attendance para sa linggong ito.',
+      'masterlistPrintHint': 'Naka-landscape ang pahina. Sa print window piliin ang Layout: Landscape at Margins: Default, o i-download ang PDF at i-print sa PDF viewer.',
+      'masterlistSummary': '{workers} hanay ng manggagawa sa {sections} seksyon (isa sa bawat technician at field).',
       'unendedWeekWarning': '{count} field day sa linggong ito ang hindi pa tapos. Maaari pa ring mag-export.',
       'notEndedCell': 'Hindi pa tapos',
       'exportSaved': 'Na-export ang masterlist.',
